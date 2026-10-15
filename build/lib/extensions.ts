@@ -483,8 +483,30 @@ export function packageCopilotExtensionStream(): Stream {
 		localExtensionsStream,
 		gulp.src(dependenciesSrc, { base: '.' })
 			.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
+			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`))),
+		copilotSdkStream(extensionPath)
 	).pipe(util2.setExecutableBit(['**/*.sh']));
+}
+
+/**
+ * The root `.moduleignore` strips `@github/copilot` from every `node_modules`, because the
+ * product itself uses `@github/copilot-sdk`. The copilot extension still needs the subset of
+ * `@github/copilot` that its own `.vscodeignore` keeps (the SDK entry points and natives). CI
+ * gets that subset from the extension VSIX; local packaging re-adds it here, reading the same
+ * `.vscodeignore` negations so the two stay in sync.
+ */
+function copilotSdkStream(extensionPath: string): Stream {
+	const prefix = '!node_modules/@github/copilot/';
+	const vscodeIgnorePath = path.join(extensionPath, '.vscodeignore');
+	const includes = fs.existsSync(vscodeIgnorePath)
+		? fs.readFileSync(vscodeIgnorePath, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(line => line.startsWith(prefix))
+		: [];
+	if (!includes.length || !fs.existsSync(path.join(extensionPath, 'node_modules', '@github', 'copilot'))) {
+		return es.readArray([]);
+	}
+
+	const relativeExtensionPath = path.relative(root, extensionPath);
+	return gulp.src(includes.map(line => path.posix.join(relativeExtensionPath, line.substring(1))), { base: '.', dot: true });
 }
 
 export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {

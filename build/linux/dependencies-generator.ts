@@ -43,6 +43,17 @@ export async function getDependencies(packageType: 'deb' | 'rpm', buildDir: stri
 		throw new Error('Invalid RPM arch string ' + arch);
 	}
 
+	// Opt-in for local packaging on hosts whose system dpkg Perl modules cannot read the Debian
+	// sysroots (dpkg-shlibdeps crashes, e.g. on recent Ubuntu). The calculation exists to check
+	// the committed reference list, so use that list directly. CI never sets this.
+	if (process.env['VSCODE_LINUX_DEPS_FROM_REFERENCE']) {
+		const referenceDeps = packageType === 'deb' ?
+			debianGeneratedDeps[arch as DebianArchString] :
+			rpmGeneratedDeps[arch as RpmArchString];
+		console.warn(`VSCODE_LINUX_DEPS_FROM_REFERENCE is set: using the committed ${packageType} dependency list for ${arch} without recalculating it.`);
+		return [...referenceDeps];
+	}
+
 	// Get the files for which we want to find dependencies.
 	// Native modules are unpacked next to the ASAR archive in `node_modules.asar.unpacked`.
 	const nativeModulesPath = path.join(buildDir, 'resources', 'app', 'node_modules.asar.unpacked');

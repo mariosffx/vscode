@@ -38,7 +38,7 @@
 	"files.insertFinalNewline": true,
 	"files.exclude": {
 		".git": true,
-		".build": true,
+		".build": false,
 		".profile-oss": true,
 		"**/*.tsbuildinfo": true,
 		"**/.DS_Store": true,

@@ -70,7 +70,7 @@ Each side bar splits into a top and a bottom half that each show one view contai
 - [ ] **Keyboard navigation** between the rail's top and bottom icon groups with the arrow keys. Today the bottom group is reachable with Tab only.
 - [ ] **Commands** to focus the bottom half and to move the focused view container to the other half, so the feature is usable without a mouse.
 - [ ] **Title context menu** of each half could offer "Move to Top Half" / "Move to Bottom Half" too; today those actions live on the rail icons only.
-- [ ] **Code that asks for the single active view container** still sees only the top half. The views service is covered; a few features call the pane composite service directly, for example chat, to check whether their container is showing. Find and update them as they come up.
+- [ ] **Code that asks for the single active view container** still sees only the top half. The views service is covered; a few features call the pane composite service directly, for example chat, to check whether their container is showing. Find and update them as they come up. Done so far: the views service and the Explorer compressed-folder keys.
 - [ ] **Startup splash** paints neither half separately.
 - [ ] **Move View pickers.** "View: Move View" and "View: Move Focused View" list only top-half containers, because the pane composite service's id lists come from the top group. Make those lists include bottom-half ids, without changing what "Next/Previous Side Bar View" cycles through.
 - [ ] **Secondary Side Bar empty check.** When every Secondary Side Bar container sits in the bottom half, layout.ts records the bar as empty, so new windows start with it hidden. Count both halves there.

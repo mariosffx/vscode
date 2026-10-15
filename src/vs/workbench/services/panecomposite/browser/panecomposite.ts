@@ -73,4 +73,15 @@ export interface IPaneCompositePartService {
 	 * Return the last active viewlet id.
 	 */
 	getLastActivePaneCompositeId(viewContainerLocation: ViewContainerLocation): string;
+
+	/**
+	 * Returns the view container shown in the bottom half of a split side bar at the location,
+	 * if any. It is visible at the same time as the active one.
+	 */
+	getBottomPaneComposite(viewContainerLocation: ViewContainerLocation): IPaneComposite | undefined;
+
+	/**
+	 * Closes the bottom half of a split side bar at the location.
+	 */
+	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void;
 }

@@ -18,6 +18,7 @@ import { IPaneCompositePartService } from '../../services/panecomposite/browser/
 import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
 import { IPaneCompositePart } from './paneCompositePart.js';
 import { SINGLE_WINDOW_PARTS } from '../../services/layout/browser/layoutService.js';
+import { coalesce } from '../../../base/common/arrays.js';
 
 export class PaneCompositePartService extends Disposable implements IPaneCompositePartService {
 
@@ -43,9 +44,18 @@ export class PaneCompositePartService extends Disposable implements IPaneComposi
 
 		const viewContainerLocations = [ViewContainerLocation.Sidebar, ViewContainerLocation.Panel, ViewContainerLocation.AuxiliaryBar];
 
+		// Include the bottom half of split side bars, whose view containers are visible too
 		const eventDisposables = this._register(new DisposableStore());
-		this.onDidPaneCompositeOpen = Event.any(...viewContainerLocations.map(loc => Event.map(this.paneCompositeParts.get(loc)!.onDidPaneCompositeOpen, composite => { return { composite, viewContainerLocation: loc }; }, eventDisposables)));
-		this.onDidPaneCompositeClose = Event.any(...viewContainerLocations.map(loc => Event.map(this.paneCompositeParts.get(loc)!.onDidPaneCompositeClose, composite => { return { composite, viewContainerLocation: loc }; }, eventDisposables)));
+		const openEvents = viewContainerLocations.flatMap(loc => {
+			const part = this.paneCompositeParts.get(loc)!;
+			return coalesce([part.onDidPaneCompositeOpen, part.onDidBottomPaneCompositeOpen]).map(event => Event.map(event, composite => { return { composite, viewContainerLocation: loc }; }, eventDisposables));
+		});
+		const closeEvents = viewContainerLocations.flatMap(loc => {
+			const part = this.paneCompositeParts.get(loc)!;
+			return coalesce([part.onDidPaneCompositeClose, part.onDidBottomPaneCompositeClose]).map(event => Event.map(event, composite => { return { composite, viewContainerLocation: loc }; }, eventDisposables));
+		});
+		this.onDidPaneCompositeOpen = Event.any(...openEvents);
+		this.onDidPaneCompositeClose = Event.any(...closeEvents);
 	}
 
 	getRegistryId(viewContainerLocation: ViewContainerLocation): string {
@@ -94,6 +104,14 @@ export class PaneCompositePartService extends Disposable implements IPaneComposi
 
 	getLastActivePaneCompositeId(viewContainerLocation: ViewContainerLocation): string {
 		return this.getPartByLocation(viewContainerLocation).getLastActivePaneCompositeId();
+	}
+
+	getBottomPaneComposite(viewContainerLocation: ViewContainerLocation): IPaneComposite | undefined {
+		return this.getPartByLocation(viewContainerLocation).getBottomPaneComposite?.();
+	}
+
+	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void {
+		this.getPartByLocation(viewContainerLocation).hideBottomPaneComposite?.();
 	}
 
 	private getPartByLocation(viewContainerLocation: ViewContainerLocation): IPaneCompositePart {

@@ -1,0 +1,81 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The side bar hosts the sash between its top and bottom half */
+.monaco-workbench .part.pane-composite-split-host {
+	position: relative;
+}
+
+/* Bottom half of a split side bar, sized by PaneCompositeSplit */
+.monaco-workbench .pane-composite-split-bottom {
+	display: none;
+	overflow: hidden;
+}
+
+.monaco-workbench .pane-composite-split-bottom.visible {
+	display: block;
+}
+
+.monaco-workbench .pane-composite-split-bottom > .part.split-bottom-part {
+	position: relative; /* contains its own progress bar and overlays */
+	width: 100%;
+	height: 100%;
+}
+
+/* Title: same look as the side bar title */
+
+.monaco-workbench .part.split-bottom-part > .title {
+	background-color: var(--vscode-sideBarTitle-background);
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .title-label h2 {
+	text-transform: uppercase;
+}
+
+.monaco-workbench .part.split-bottom-part .title-actions .actions-container {
+	justify-content: flex-end;
+}
+
+.monaco-workbench .part.split-bottom-part .title-actions .action-item {
+	margin-right: 4px;
+}
+
+/* Composite bar in the title, shown when no vertical activity bar shows the bottom half's items */
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container {
+	flex: 1;
+}
+
+.monaco-workbench .part.split-bottom-part.pane-composite-part > .composite.title.has-composite-bar > .title-actions {
+	flex: inherit;
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item:focus {
+	outline: 0 !important; /* activity bar indicates focus custom */
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item .action-label {
+	outline-offset: 2px;
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item .action-label::before {
+	position: absolute;
+	left: 5px; /* place icon in center */
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.checked:not(:focus) .active-item-indicator:before,
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.checked.clicked:focus .active-item-indicator:before {
+	border-top-color: var(--vscode-panelTitle-activeBorder) !important;
+}
+
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item:hover .action-label,
+.monaco-workbench .part.split-bottom-part > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item:focus .action-label {
+	color: var(--vscode-sideBarTitle-foreground) !important;
+}
+
+/* The hosting side bar's empty state must not leak into its open bottom half */
+.monaco-workbench .pane-composite-part.split-bottom-part:not(.empty) .empty-pane-message-area {
+	display: none;
+}

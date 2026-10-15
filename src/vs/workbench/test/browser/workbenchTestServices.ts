@@ -770,6 +770,12 @@ export class TestPaneCompositeService extends Disposable implements IPaneComposi
 	getLastActivePaneCompositeId(viewContainerLocation: ViewContainerLocation): string {
 		return this.getPartByLocation(viewContainerLocation).getLastActivePaneCompositeId();
 	}
+	getBottomPaneComposite(viewContainerLocation: ViewContainerLocation): IPaneComposite | undefined {
+		return this.getPartByLocation(viewContainerLocation).getBottomPaneComposite?.();
+	}
+	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void {
+		this.getPartByLocation(viewContainerLocation).hideBottomPaneComposite?.();
+	}
 
 	getPinnedPaneCompositeIds(viewContainerLocation: ViewContainerLocation): string[] {
 		throw new Error('Method not implemented.');

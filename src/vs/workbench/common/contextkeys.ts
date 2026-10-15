@@ -136,6 +136,8 @@ export const EditorTabsVisibleContext = new RawContextKey<boolean>('editorTabsVi
 export const SideBarVisibleContext = new RawContextKey<boolean>('sideBarVisible', false, localize('sideBarVisible', "Whether the sidebar is visible"));
 export const SidebarFocusContext = new RawContextKey<boolean>('sideBarFocus', false, localize('sideBarFocus', "Whether the sidebar has keyboard focus"));
 export const ActiveViewletContext = new RawContextKey<string>('activeViewlet', '', localize('activeViewlet', "The identifier of the active viewlet"));
+export const SidebarBottomFocusContext = new RawContextKey<boolean>('sideBarBottomFocus', false, localize('sideBarBottomFocus', "Whether the bottom half of the split sidebar has keyboard focus"));
+export const ActiveViewletBottomContext = new RawContextKey<string>('activeViewletBottom', '', localize('activeViewletBottom', "The identifier of the view container in the bottom half of the split sidebar"));
 
 //#endregion
 
@@ -178,6 +180,8 @@ export const AuxiliaryBarFocusContext = new RawContextKey<boolean>('auxiliaryBar
 export const AuxiliaryBarVisibleContext = new RawContextKey<boolean>('auxiliaryBarVisible', false, localize('auxiliaryBarVisible', "Whether the auxiliary bar is visible"));
 export const SecondarySideBarVisibleContext = new RawContextKey<boolean>('secondarySideBarVisible', false, localize('secondarySideBarVisible', "Whether the layout surface representing the secondary side bar is visible"));
 export const AuxiliaryBarMaximizedContext = new RawContextKey<boolean>('auxiliaryBarMaximized', false, localize('auxiliaryBarMaximized', "Whether the auxiliary bar is maximized"));
+export const AuxiliaryBarBottomFocusContext = new RawContextKey<boolean>('auxiliaryBarBottomFocus', false, localize('auxiliaryBarBottomFocus', "Whether the bottom half of the split auxiliary bar has keyboard focus"));
+export const ActiveAuxiliaryBottomContext = new RawContextKey<string>('activeAuxiliaryBottom', '', localize('activeAuxiliaryBottom', "The identifier of the view container in the bottom half of the split auxiliary bar"));
 
 //#endregion
 

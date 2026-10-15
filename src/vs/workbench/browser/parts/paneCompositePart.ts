@@ -56,6 +56,28 @@ export interface IPaneCompositePart extends IView {
 	readonly onDidPaneCompositeClose: Event<IPaneComposite>;
 
 	/**
+	 * Fires when a view container opens in the bottom half of a split side bar.
+	 * Only parts that can split implement this.
+	 */
+	readonly onDidBottomPaneCompositeOpen?: Event<IPaneComposite>;
+
+	/**
+	 * Fires when a view container closes in the bottom half of a split side bar.
+	 * Only parts that can split implement this.
+	 */
+	readonly onDidBottomPaneCompositeClose?: Event<IPaneComposite>;
+
+	/**
+	 * Returns the view container shown in the bottom half of a split side bar, if any.
+	 */
+	getBottomPaneComposite?(): IPaneComposite | undefined;
+
+	/**
+	 * Closes the bottom half of a split side bar.
+	 */
+	hideBottomPaneComposite?(): void;
+
+	/**
 	 * Opens a viewlet with the given identifier and pass keyboard focus to it if specified.
 	 */
 	openPaneComposite(id: string | undefined, focus?: boolean): Promise<IPaneComposite | undefined>;
@@ -104,6 +126,40 @@ export interface IPaneCompositePart extends IView {
 	 * Returns id of all view containers following the visual order.
 	 */
 	getPaneCompositeIds(): string[];
+}
+
+/**
+ * The bottom half of a split side bar, as seen by the part that hosts it. View containers
+ * placed in the bottom slot open there instead of in the hosting part.
+ */
+export interface IPaneCompositeSplit {
+
+	/**
+	 * Whether the view container belongs to the bottom slot.
+	 */
+	isInBottom(viewContainerId: string): boolean;
+
+	/**
+	 * Opens the view container in the bottom half.
+	 */
+	openInBottom(viewContainerId: string, focus?: boolean): Promise<IPaneComposite | undefined>;
+
+	/**
+	 * Called before the hosting part opens a view container of its own, so the bottom half can
+	 * drop a copy it still holds.
+	 */
+	willOpenInTop(viewContainerId: string): void;
+
+	/**
+	 * Creates the bottom half right after the content area of the hosting part.
+	 */
+	create(contentArea: HTMLElement, host: HTMLElement): void;
+
+	/**
+	 * Lays out the bottom half within the given content size and returns the height left
+	 * for the hosting part.
+	 */
+	layout(width: number, height: number): number;
 }
 
 export abstract class AbstractPaneCompositePart extends CompositePart<PaneComposite> implements IPaneCompositePart {
@@ -187,26 +243,71 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 		this._register(this.onDidPaneCompositeClose(this.onDidClose, this));
 
 		this._register(this.registry.onDidDeregister((viewletDescriptor: PaneCompositeDescriptor) => {
-
-			const activeContainers = this.viewDescriptorService.getViewContainersByLocation(this.location)
-				.filter(container => this.viewDescriptorService.getViewContainerModel(container).activeViewDescriptors.length > 0);
-
-			if (activeContainers.length) {
-				if (this.getActiveComposite()?.getId() === viewletDescriptor.id) {
-					const defaultViewletId = this.viewDescriptorService.getDefaultViewContainer(this.location)?.id;
-					const containerToOpen = activeContainers.filter(c => c.id === defaultViewletId)[0] || activeContainers[0];
-					this.doOpenPaneComposite(containerToOpen.id);
-				}
-			} else {
-				this.layoutService.setPartHidden(true, this.partId);
-			}
-
+			this.onDidDeregisterPaneComposite(viewletDescriptor);
 			this.removeComposite(viewletDescriptor.id);
 		}));
 
 		this._register(this.extensionService.onDidRegisterExtensions(() => {
 			this.layoutCompositeBar();
 		}));
+	}
+
+	/**
+	 * Called when a view container leaves this part's location. By default, when it was the
+	 * active one, another view container of this part opens in its place, and the part hides
+	 * when no view container with views is left.
+	 */
+	protected onDidDeregisterPaneComposite(descriptor: PaneCompositeDescriptor): void {
+		const split = this.getSplit();
+		const activeContainers = this.viewDescriptorService.getViewContainersByLocation(this.location)
+			.filter(container => !split?.isInBottom(container.id))
+			.filter(container => this.viewDescriptorService.getViewContainerModel(container).activeViewDescriptors.length > 0);
+
+		if (activeContainers.length) {
+			if (this.getActiveComposite()?.getId() === descriptor.id) {
+				const defaultViewletId = this.viewDescriptorService.getDefaultViewContainer(this.location)?.id;
+				const containerToOpen = activeContainers.filter(c => c.id === defaultViewletId)[0] || activeContainers[0];
+				this.doOpenPaneComposite(containerToOpen.id);
+			}
+		} else if (!split || this.getActiveComposite()?.getId() === descriptor.id) {
+			this.layoutService.setPartHidden(true, this.partId);
+		}
+	}
+
+	/**
+	 * The bottom half of this part when it can split. Parts that cannot split return `undefined`.
+	 */
+	protected getSplit(): IPaneCompositeSplit | undefined {
+		return undefined;
+	}
+
+	/**
+	 * Whether this part is laid out by its hosting part instead of the workbench grid, as the
+	 * bottom half of a split side bar is. Such a part ignores the layout service visibility of
+	 * its own id and the floating card insets, which belong to the hosting part.
+	 */
+	protected isEmbedded(): boolean {
+		return false;
+	}
+
+	/**
+	 * Closes the view container if it is open in this part and drops its cached instance, so it
+	 * can be created afresh elsewhere.
+	 */
+	/**
+	 * Lays the part out again in its current size, e.g. after the split between its top and
+	 * bottom half changed.
+	 */
+	relayoutPart(): void {
+		this.relayout();
+	}
+
+	removePaneComposite(id: string): void {
+		if (this.getActiveComposite()?.getId() === id) {
+			this.hideActiveComposite();
+		}
+
+		this.removeComposite(id);
 	}
 
 	private onDidOpen(composite: IComposite): void {
@@ -244,6 +345,10 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 
 		if (this.contentArea) {
 			this.createEmptyPaneMessage(this.contentArea);
+		}
+
+		if (this.contentArea) {
+			this.getSplit()?.create(this.contentArea, parent);
 		}
 
 		this.updateCompositeBar();
@@ -502,6 +607,19 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	}
 
 	async openPaneComposite(id?: string, focus?: boolean): Promise<PaneComposite | undefined> {
+		const split = this.getSplit();
+		if (typeof id === 'string' && split?.isInBottom(id)) {
+			if (!this.layoutService.isVisible(this.partId)) {
+				this.layoutService.setPartHidden(false, this.partId);
+			}
+
+			return await split.openInBottom(id, focus) as PaneComposite | undefined;
+		}
+
+		if (typeof id === 'string') {
+			split?.willOpenInTop(id);
+		}
+
 		if (typeof id === 'string' && this.getPaneComposite(id)) {
 			return this.doOpenPaneComposite(id, focus);
 		}
@@ -597,7 +715,7 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	}
 
 	override layout(width: number, height: number, top: number, left: number): void {
-		if (!this.layoutService.isVisible(this.partId)) {
+		if (!this.isEmbedded() && !this.layoutService.isVisible(this.partId)) {
 			return;
 		}
 
@@ -609,9 +727,11 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 		// When the floating panels experiment is enabled, shrink the content to
 		// leave room for the card margin and border applied via CSS on the part.
 		const floatingInset = this.getFloatingInset();
-		this.element.style.height = this.layoutService.isFloatingPanelsEnabled()
-			? `calc(100% - ${floatingInset.verticalMargin}px)`
-			: '';
+		if (!this.isEmbedded()) {
+			this.element.style.height = this.layoutService.isFloatingPanelsEnabled()
+				? `calc(100% - ${floatingInset.verticalMargin}px)`
+				: '';
+		}
 		if (floatingInset.width > 0 || floatingInset.height > 0) {
 			width = Math.max(0, width - floatingInset.width);
 			height = Math.max(0, height - floatingInset.height);
@@ -623,7 +743,7 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 		// matching outer gutter and corner radius can be applied in CSS (kept in sync with
 		// `getFloatingInset`).
 		const outerGutter = this.getFloatingOuterGutterEdges();
-		const verticalOuterEdges = getFloatingPaneCompositeVerticalOuterEdges(this.layoutService, this.partId, getWindow(this.element));
+		const verticalOuterEdges = this.isEmbedded() ? { top: false, bottom: false } : getFloatingPaneCompositeVerticalOuterEdges(this.layoutService, this.partId, getWindow(this.element));
 		this.element.classList.toggle('floating-part-outer-left', outerGutter.left);
 		this.element.classList.toggle('floating-part-outer-right', outerGutter.right);
 		this.element.classList.toggle('floating-part-outer-top', verticalOuterEdges.top);
@@ -641,8 +761,10 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 			workbenchContainer.classList.toggle('floating-panel-outer-right', outerGutter.right);
 		}
 
-		// Layout contents
-		super.layout(this.contentDimension.width, this.contentDimension.height, top, left);
+		// Layout contents, leaving room for the bottom half of a split side bar
+		const split = this.getSplit();
+		const ownHeight = split ? split.layout(this.contentDimension.width, this.contentDimension.height) : this.contentDimension.height;
+		super.layout(this.contentDimension.width, ownHeight, top, left);
 
 		// Layout composite bar
 		this.layoutCompositeBar();
@@ -678,7 +800,7 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	 * margin, so its width inset is larger on that side.
 	 */
 	private getFloatingInset(): { width: number; height: number; verticalMargin: number } {
-		if (!this.layoutService.isFloatingPanelsEnabled()) {
+		if (!this.layoutService.isFloatingPanelsEnabled() || this.isEmbedded()) {
 			return { width: 0, height: 0, verticalMargin: 0 };
 		}
 

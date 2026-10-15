@@ -29,13 +29,20 @@
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.top::before,
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.top::after,
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.bottom::before,
-.monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.bottom::after {
+.monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.bottom::after,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.top::before,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.top::after,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.bottom::before,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.bottom::after {
 	transition-delay: 0s;
 }
 
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.bottom + .action-item::before,
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item.top::before,
 .monaco-workbench .activitybar > .content > .composite-bar > .monaco-action-bar .action-item:last-of-type.bottom::after,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.bottom + .action-item::before,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item.top::before,
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group > .composite-bar > .monaco-action-bar .action-item:last-of-type.bottom::after,
 .monaco-workbench .activitybar > .content.dragged-over-head > .composite-bar > .monaco-action-bar .action-item:first-of-type::before,
 .monaco-workbench .activitybar > .content.dragged-over-tail > .composite-bar > .monaco-action-bar .action-item:last-of-type::after {
 	background-color: var(--insert-border-color);

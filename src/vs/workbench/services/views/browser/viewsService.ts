@@ -199,7 +199,7 @@ export class ViewsService extends Disposable implements IViewsService {
 		return this.paneCompositeService.getPaneComposite(compositeId, location);
 	}
 
-	// One view container can be visible at a time in a location
+	// One view container can be visible at a time in a location, plus one in the bottom half of a split side bar
 	isViewContainerVisible(id: string): boolean {
 		const viewContainer = this.viewDescriptorService.getViewContainerById(id);
 		if (!viewContainer) {
@@ -211,7 +211,8 @@ export class ViewsService extends Disposable implements IViewsService {
 			return false;
 		}
 
-		return this.paneCompositeService.getActivePaneComposite(viewContainerLocation)?.getId() === id;
+		return this.paneCompositeService.getActivePaneComposite(viewContainerLocation)?.getId() === id
+			|| this.paneCompositeService.getBottomPaneComposite(viewContainerLocation)?.getId() === id;
 	}
 
 	// Multiple view containers can be active/inactive at a time in a location
@@ -257,6 +258,9 @@ export class ViewsService extends Disposable implements IViewsService {
 			const viewContainerLocation = this.viewDescriptorService.getViewContainerLocation(viewContainer);
 			const isActive = viewContainerLocation !== null && this.paneCompositeService.getActivePaneComposite(viewContainerLocation);
 			if (viewContainerLocation !== null) {
+				if (this.paneCompositeService.getBottomPaneComposite(viewContainerLocation)?.getId() === id) {
+					return this.paneCompositeService.hideBottomPaneComposite(viewContainerLocation);
+				}
 				return isActive ? this.layoutService.setPartHidden(true, this.paneCompositeService.getPartId(viewContainerLocation)) : undefined;
 			}
 		}
@@ -332,7 +336,10 @@ export class ViewsService extends Disposable implements IViewsService {
 				if (view) {
 					if (activeViewPaneContainer.views.length === 1) {
 						const location = this.viewDescriptorService.getViewContainerLocation(viewContainer);
-						if (location === ViewContainerLocation.Sidebar) {
+						if (location !== null && this.paneCompositeService.getBottomPaneComposite(location)?.getId() === viewContainer.id) {
+							// Close just the bottom half of the split side bar
+							this.paneCompositeService.hideBottomPaneComposite(location);
+						} else if (location === ViewContainerLocation.Sidebar) {
 							this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
 						} else if (location === ViewContainerLocation.Panel || location === ViewContainerLocation.AuxiliaryBar) {
 							this.paneCompositeService.hideActivePaneComposite(location);
@@ -361,6 +368,11 @@ export class ViewsService extends Disposable implements IViewsService {
 		const activePaneComposite = this.paneCompositeService.getActivePaneComposite(location);
 		if (activePaneComposite?.getId() === viewContainer.id) {
 			return activePaneComposite.getViewPaneContainer() || null;
+		}
+
+		const bottomPaneComposite = this.paneCompositeService.getBottomPaneComposite(location);
+		if (bottomPaneComposite?.getId() === viewContainer.id) {
+			return bottomPaneComposite.getViewPaneContainer() || null;
 		}
 
 		return null;
@@ -429,12 +441,18 @@ export class ViewsService extends Disposable implements IViewsService {
 					const viewDescriptorService = serviceAccessor.get(IViewDescriptorService);
 					const layoutService = serviceAccessor.get(IWorkbenchLayoutService);
 					const viewsService = serviceAccessor.get(IViewsService);
+					const paneCompositeService = serviceAccessor.get(IPaneCompositePartService);
 					const viewContainerLocation = viewDescriptorService.getViewContainerLocation(viewContainer);
 					switch (viewContainerLocation) {
 						case ViewContainerLocation.AuxiliaryBar:
 						case ViewContainerLocation.Sidebar: {
 							const part = viewContainerLocation === ViewContainerLocation.Sidebar ? Parts.SIDEBAR_PART : Parts.AUXILIARYBAR_PART;
-							if (!viewsService.isViewContainerVisible(viewContainer.id) || !layoutService.hasFocus(part)) {
+
+							// In a split side bar, focus in the other half does not count as focus in this view container
+							const focusedView = viewsService.getFocusedView();
+							const hasFocus = layoutService.hasFocus(part) && (!paneCompositeService.getBottomPaneComposite(viewContainerLocation)
+								|| (!!focusedView && viewDescriptorService.getViewContainerByViewId(focusedView.id)?.id === viewContainer.id));
+							if (!viewsService.isViewContainerVisible(viewContainer.id) || !hasFocus) {
 								await viewsService.openViewContainer(viewContainer.id, true);
 							} else {
 								editorGroupService.activeGroup.focus();

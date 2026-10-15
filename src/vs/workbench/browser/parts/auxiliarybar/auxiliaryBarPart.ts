@@ -13,7 +13,7 @@ import { INotificationService } from '../../../../platform/notification/common/n
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { contrastBorder } from '../../../../platform/theme/common/colorRegistry.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
-import { ActiveAuxiliaryContext, AuxiliaryBarFocusContext } from '../../../common/contextkeys.js';
+import { ActiveAuxiliaryBottomContext, ActiveAuxiliaryContext, AuxiliaryBarBottomFocusContext, AuxiliaryBarFocusContext } from '../../../common/contextkeys.js';
 import { ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_TOP_ACTIVE_BORDER, ACTIVITY_BAR_TOP_DRAG_AND_DROP_BORDER, ACTIVITY_BAR_TOP_FOREGROUND, ACTIVITY_BAR_TOP_INACTIVE_FOREGROUND, PANEL_ACTIVE_TITLE_BORDER, PANEL_ACTIVE_TITLE_FOREGROUND, PANEL_DRAG_AND_DROP_BORDER, PANEL_INACTIVE_TITLE_FOREGROUND, SIDE_BAR_BACKGROUND, SIDE_BAR_BORDER, SIDE_BAR_TITLE_BORDER, SIDE_BAR_FOREGROUND } from '../../../common/theme.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
@@ -25,7 +25,11 @@ import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { LayoutPriority } from '../../../../base/browser/ui/splitview/splitview.js';
 import { ToggleSecondaryActivityBarVisibilityActionId, ToggleSidebarPositionAction } from '../../actions/layoutActions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { AbstractPaneCompositePart, CompositeBarPosition } from '../paneCompositePart.js';
+import { AbstractPaneCompositePart, CompositeBarPosition, IPaneCompositeSplit } from '../paneCompositePart.js';
+import { PaneCompositeSplit } from '../paneCompositeSplit.js';
+import { IPaneComposite } from '../../../common/panecomposite.js';
+import { Event } from '../../../../base/common/event.js';
+import { IProgressIndicator } from '../../../../platform/progress/common/progress.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
 import { Action2, IMenuService, MenuId, registerAction2, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
@@ -88,12 +92,38 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	 * view container state with the composite bar this part renders in its title, header or
 	 * footer, so switching positions keeps the same items.
 	 */
+	private readonly split = this._register(this.instantiationService.createInstance(PaneCompositeSplit, {
+		host: this,
+		hostPartId: Parts.AUXILIARYBAR_PART,
+		partId: Parts.AUXILIARYBAR_BOTTOM_PART,
+		location: ViewContainerLocation.AuxiliaryBar,
+		registryId: Extensions.Auxiliary,
+		storagePrefix: 'workbench.auxiliarybar.bottom',
+		activeContext: ActiveAuxiliaryBottomContext,
+		focusContext: AuxiliaryBarBottomFocusContext,
+		titleMenuId: MenuId.AuxiliaryBarBottomTitle,
+		partContainerClass: 'auxiliarybar',
+		showCompositeBar: () => this.shouldShowCompositeBar() // the bottom half shows its items in its title when the rail does not
+	}));
+
+	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;
+	readonly onDidBottomPaneCompositeClose: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeClose;
+
 	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this, {
 		partId: Parts.AUXILIARY_ACTIVITYBAR_PART,
 		pinnedViewContainersKey: AuxiliaryBarPart.pinnedViewsKey,
 		placeholderViewContainersKey: AuxiliaryBarPart.placeholdeViewContainersKey,
 		viewContainersWorkspaceStateKey: AuxiliaryBarPart.viewContainersWorkspaceStateKey,
-		globalActivities: false
+		globalActivities: false,
+		split: {
+			bottomPart: this.split.bottomPart,
+			topFilter: this.split.topFilter,
+			bottomFilter: this.split.bottomFilter,
+			bottomPinnedViewContainersKey: this.split.bottomPinnedViewContainersKey,
+			bottomPlaceholderViewContainersKey: this.split.bottomPlaceholderViewContainersKey,
+			bottomViewContainersWorkspaceStateKey: this.split.bottomViewContainersWorkspaceStateKey,
+			getMoveActions: id => this.split.getMoveActions(id)
+		}
 	}));
 
 	constructor(
@@ -212,7 +242,25 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 			this.activityBarPart.show();
 		}
 
+		this.split.refreshCompositeBar();
+
 		this.rememberActivityBarVisiblePosition();
+	}
+
+	protected override getSplit(): IPaneCompositeSplit {
+		return this.split;
+	}
+
+	getBottomPaneComposite(): IPaneComposite | undefined {
+		return this.split.getBottomPaneComposite();
+	}
+
+	hideBottomPaneComposite(): void {
+		this.split.hideBottomPaneComposite();
+	}
+
+	override getProgressIndicator(id: string): IProgressIndicator | undefined {
+		return super.getProgressIndicator(id) ?? this.split.bottomPart.getProgressIndicator(id);
 	}
 
 	private shouldShowActivityBar(): boolean {
@@ -310,6 +358,8 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 			pinnedViewContainersKey: AuxiliaryBarPart.pinnedViewsKey,
 			placeholderViewContainersKey: AuxiliaryBarPart.placeholdeViewContainersKey,
 			viewContainersWorkspaceStateKey: AuxiliaryBarPart.viewContainersWorkspaceStateKey,
+			filter: this.split.topFilter,
+			transformContextMenuActionsForComposite: (actions, id) => [...actions, ...this.split.getMoveActions(id)],
 			icon: !this.configuration.showLabels,
 			orientation: ActionsOrientation.HORIZONTAL,
 			recomputeSizes: true,

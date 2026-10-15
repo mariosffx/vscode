@@ -9,6 +9,7 @@ import { IActivityService } from '../../services/activity/common/activity.js';
 import { IWorkbenchLayoutService, Parts } from '../../services/layout/browser/layoutService.js';
 import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
 import { IDisposable, DisposableStore, Disposable, DisposableMap, combinedDisposable } from '../../../base/common/lifecycle.js';
+import { Emitter, Event } from '../../../base/common/event.js';
 import { IColorTheme } from '../../../platform/theme/common/themeService.js';
 import { CompositeBar, ICompositeBarItem, CompositeDragAndDrop } from './compositeBar.js';
 import { Dimension, isMouseEvent } from '../../../base/browser/dom.js';
@@ -23,7 +24,8 @@ import { IContextKeyService, ContextKeyExpr } from '../../../platform/contextkey
 import { isString } from '../../../base/common/types.js';
 import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { isNative } from '../../../base/common/platform.js';
-import { Before2D, ICompositeDragAndDrop } from '../dnd.js';
+import { Before2D, CompositeDragAndDropData, ICompositeDragAndDrop } from '../dnd.js';
+import { IPaneComposite } from '../../common/panecomposite.js';
 import { ThemeIcon } from '../../../base/common/themables.js';
 import { IAction, Separator, SubmenuAction, toAction } from '../../../base/common/actions.js';
 import { StringSHA1 } from '../../../base/common/hash.js';
@@ -67,6 +69,25 @@ interface ICachedViewContainer {
 	views?: { when?: string }[];
 }
 
+/**
+ * Limits a composite bar to some of the view containers of its location, as the two halves
+ * of a split side bar each show their own view containers.
+ */
+export interface IPaneCompositeBarFilter {
+
+	/**
+	 * Whether the bar shows the view container.
+	 */
+	includes(viewContainerId: string): boolean;
+
+	/**
+	 * Makes the bar show the view container, e.g. after it was dropped on the bar.
+	 */
+	include(viewContainerId: string): void;
+
+	readonly onDidChange: Event<void>;
+}
+
 export interface IPaneCompositeBarOptions {
 	readonly partContainerClass: string;
 	readonly pinnedViewContainersKey: string;
@@ -84,9 +105,17 @@ export interface IPaneCompositeBarOptions {
 	readonly fillExtraContextMenuActions: (actions: IAction[], e?: MouseEvent | GestureEvent) => void;
 	readonly transformContextMenuActionsForComposite?: (actions: IAction[], compositeId: string) => IAction[];
 	readonly colors: (theme: IColorTheme) => ICompositeBarColors;
+	readonly filter?: IPaneCompositeBarFilter;
 }
 
 export class PaneCompositeBar extends Disposable {
+
+	private readonly _onDidChangeComposites = this._register(new Emitter<void>());
+
+	/**
+	 * Fires when view containers are shown, hidden or removed on the bar.
+	 */
+	readonly onDidChangeComposites = this._onDidChangeComposites.event;
 
 	private readonly viewContainerDisposables = this._register(new DisposableMap<string, IDisposable>());
 
@@ -112,11 +141,14 @@ export class PaneCompositeBar extends Disposable {
 	) {
 		super();
 
-		this.dndHandler = new CompositeDragAndDrop(this.viewDescriptorService, this.location, this.options.orientation,
-			async (id: string, focus?: boolean) => { return await this.paneCompositePart.openPaneComposite(id, focus) ?? null; },
-			(from: string, to: string, before?: Before2D) => this.compositeBar.move(from, to, this.options.orientation === ActionsOrientation.VERTICAL ? before?.verticallyBefore : before?.horizontallyBefore),
+		const openComposite = async (id: string, focus?: boolean) => { return await this.paneCompositePart.openPaneComposite(id, focus) ?? null; };
+		const moveComposite = (from: string, to: string, before?: Before2D) => this.compositeBar.move(from, to, this.options.orientation === ActionsOrientation.VERTICAL ? before?.verticallyBefore : before?.horizontallyBefore);
+		const dndHandler = new CompositeDragAndDrop(this.viewDescriptorService, this.location, this.options.orientation,
+			openComposite,
+			moveComposite,
 			() => this.compositeBar.getCompositeBarItems(),
 		);
+		this.dndHandler = this.options.filter ? new FilteredCompositeDragAndDrop(dndHandler, this.options.filter, this.viewDescriptorService, this.location, openComposite, moveComposite) : dndHandler;
 
 		const cachedItems = this.cachedViewContainers
 			.map(container => ({
@@ -127,6 +159,7 @@ export class PaneCompositeBar extends Disposable {
 				pinned: container.pinned,
 			}));
 		this.compositeBar = this.createCompositeBar(cachedItems);
+		this._register(this.compositeBar.onDidChange(() => this._onDidChangeComposites.fire()));
 		this.onDidRegisterViewContainers(this.getViewContainers());
 		this.registerListeners();
 	}
@@ -150,7 +183,11 @@ export class PaneCompositeBar extends Disposable {
 				const actions = this.getContextMenuActionsForComposite(compositeId);
 				return this.options.transformContextMenuActionsForComposite?.(actions, compositeId) ?? actions;
 			},
-			getDefaultCompositeId: () => this.viewDescriptorService.getDefaultViewContainer(this.location)?.id,
+			getDefaultCompositeId: () => {
+				// A filtered bar only falls back to the default view container when it shows it
+				const defaultId = this.viewDescriptorService.getDefaultViewContainer(this.location)?.id;
+				return defaultId && (!this.options.filter || this.options.filter.includes(defaultId)) ? defaultId : undefined;
+			},
 			dndHandler: this.dndHandler,
 			compositeSize: this.options.compositeSize,
 			overflowActionSize: this.options.overflowActionSize,
@@ -225,6 +262,11 @@ export class PaneCompositeBar extends Disposable {
 		this._register(this.viewDescriptorService.onDidChangeViewContainers(({ added, removed }) => this.onDidChangeViewContainers(added, removed)));
 		this._register(this.viewDescriptorService.onDidChangeContainerLocation(({ viewContainer, from, to }) => this.onDidChangeViewContainerLocation(viewContainer, from, to)));
 
+		// Filter Changes
+		if (this.options.filter) {
+			this._register(this.options.filter.onDidChange(() => this.getViewContainers().forEach(viewContainer => this.showOrHideViewContainer(viewContainer))));
+		}
+
 		// View Container Visibility Changes
 		this._register(this.paneCompositePart.onDidPaneCompositeOpen(e => this.onDidChangeViewContainerVisibility(e.getId(), true)));
 		this._register(this.paneCompositePart.onDidPaneCompositeClose(e => this.onDidChangeViewContainerVisibility(e.getId(), false)));
@@ -265,6 +307,7 @@ export class PaneCompositeBar extends Disposable {
 		} else {
 			// Deactivate view container action on close
 			this.compositeBar.deactivateComposite(id);
+			this._onDidChangeComposites.fire();
 		}
 	}
 
@@ -438,6 +481,10 @@ export class PaneCompositeBar extends Disposable {
 		const viewContainer = isString(viewContainerOrId) ? this.getViewContainer(viewContainerOrId) : viewContainerOrId;
 		const viewContainerId = isString(viewContainerOrId) ? viewContainerOrId : viewContainerOrId.id;
 
+		if (this.options.filter && !this.options.filter.includes(viewContainerId)) {
+			return true;
+		}
+
 		if (viewContainer) {
 			if (viewContainer.hideIfEmpty) {
 				if (this.viewService.isViewContainerActive(viewContainerId)) {
@@ -467,10 +514,12 @@ export class PaneCompositeBar extends Disposable {
 
 	private addComposite(viewContainer: ViewContainer): void {
 		this.compositeBar.addComposite({ id: viewContainer.id, name: typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value, order: viewContainer.order, requestedIndex: viewContainer.requestedIndex });
+		this._onDidChangeComposites.fire();
 	}
 
 	private hideComposite(compositeId: string): void {
 		this.compositeBar.hideComposite(compositeId);
+		this._onDidChangeComposites.fire();
 
 		const compositeActions = this.compositeActions.get(compositeId);
 		if (compositeActions) {
@@ -480,6 +529,7 @@ export class PaneCompositeBar extends Disposable {
 
 	private removeComposite(compositeId: string): void {
 		this.compositeBar.removeComposite(compositeId);
+		this._onDidChangeComposites.fire();
 
 		const compositeActions = this.compositeActions.get(compositeId);
 		if (compositeActions) {
@@ -811,8 +861,9 @@ class ViewContainerActivityAction extends CompositeBarAction {
 
 		const focus = (event && 'preserveFocus' in event) ? !event.preserveFocus : true;
 
-		if (this.part === Parts.ACTIVITYBAR_PART) {
-			const sideBarVisible = this.layoutService.isVisible(Parts.SIDEBAR_PART);
+		if (this.part === Parts.ACTIVITYBAR_PART || this.part === Parts.AUXILIARY_ACTIVITYBAR_PART) {
+			const sideBarPart = this.part === Parts.ACTIVITYBAR_PART ? Parts.SIDEBAR_PART : Parts.AUXILIARYBAR_PART;
+			const sideBarVisible = this.layoutService.isVisible(sideBarPart);
 			const activeViewlet = this.paneCompositePart.getActivePaneComposite();
 			const focusBehavior = this.configurationService.getValue<string>('workbench.activityBar.iconClickBehavior');
 
@@ -823,8 +874,13 @@ class ViewContainerActivityAction extends CompositeBarAction {
 						break;
 					case 'toggle':
 					default:
-						// Hide sidebar if selected viewlet already visible
-						this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+						// Hide the side bar if the selected view container is already visible in it, or
+						// close just the bottom half of a split side bar when it shows the item.
+						if (this.paneCompositePart.partId === sideBarPart) {
+							this.layoutService.setPartHidden(true, sideBarPart);
+						} else {
+							this.paneCompositePart.hideActivePaneComposite();
+						}
 						break;
 				}
 
@@ -838,6 +894,69 @@ class ViewContainerActivityAction extends CompositeBarAction {
 }
 
 class PlaceHolderViewContainerActivityAction extends ViewContainerActivityAction { }
+
+/**
+ * Drag and drop for a filtered composite bar: dropping a view container of the same location
+ * that the bar does not show yet moves it into the bar (for example into the bottom half of a
+ * split side bar) instead of only reordering.
+ */
+class FilteredCompositeDragAndDrop implements ICompositeDragAndDrop {
+
+	constructor(
+		private readonly delegate: CompositeDragAndDrop,
+		private readonly filter: IPaneCompositeBarFilter,
+		private readonly viewDescriptorService: IViewDescriptorService,
+		private readonly location: ViewContainerLocation,
+		private readonly openComposite: (id: string, focus?: boolean) => Promise<IPaneComposite | null>,
+		private readonly moveComposite: (from: string, to: string, before?: Before2D) => void,
+	) { }
+
+	drop(data: CompositeDragAndDropData, targetCompositeId: string | undefined, originalEvent: DragEvent, before?: Before2D): void {
+		const dragData = data.getData();
+
+		if (dragData.type === 'composite') {
+			const viewContainer = this.viewDescriptorService.getViewContainerById(dragData.id);
+			if (viewContainer && !this.filter.includes(viewContainer.id)) {
+				const sameLocation = this.viewDescriptorService.getViewContainerLocation(viewContainer) === this.location;
+
+				// Assign the slot first so opening the view container lands in this bar's half
+				this.filter.include(viewContainer.id);
+
+				if (sameLocation && !targetCompositeId) {
+					this.openComposite(viewContainer.id, true);
+					return;
+				}
+			}
+		}
+
+		else if (dragData.type === 'view') {
+			const viewToMove = this.viewDescriptorService.getViewDescriptorById(dragData.id);
+			if (viewToMove?.canMoveView) {
+				this.viewDescriptorService.moveViewToLocation(viewToMove, this.location, 'dnd');
+
+				const newContainer = this.viewDescriptorService.getViewContainerByViewId(viewToMove.id);
+				if (newContainer) {
+					this.filter.include(newContainer.id);
+					if (targetCompositeId) {
+						this.moveComposite(newContainer.id, targetCompositeId, before);
+					}
+					this.openComposite(newContainer.id, true).then(composite => composite?.openView(viewToMove.id, true));
+				}
+				return;
+			}
+		}
+
+		this.delegate.drop(data, targetCompositeId, originalEvent, before);
+	}
+
+	onDragOver(data: CompositeDragAndDropData, targetCompositeId: string | undefined, originalEvent: DragEvent): boolean {
+		return this.delegate.onDragOver(data, targetCompositeId, originalEvent);
+	}
+
+	onDragEnter(data: CompositeDragAndDropData, targetCompositeId: string | undefined, originalEvent: DragEvent): boolean {
+		return this.delegate.onDragEnter(data, targetCompositeId, originalEvent);
+	}
+}
 
 class PlaceHolderToggleCompositePinnedAction extends ToggleCompositePinnedAction {
 

@@ -44,8 +44,6 @@ import { IAction, toAction } from '../../../../base/common/actions.js';
 import { EditorOpenSource } from '../../../../platform/editor/common/editor.js';
 import { hash } from '../../../../base/common/hash.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
-import { ViewContainerLocation } from '../../../common/views.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { OPEN_TO_SIDE_COMMAND_ID, COMPARE_WITH_SAVED_COMMAND_ID, SELECT_FOR_COMPARE_COMMAND_ID, ResourceSelectedForCompareContext, COMPARE_SELECTED_COMMAND_ID, COMPARE_RESOURCE_COMMAND_ID, COPY_PATH_COMMAND_ID, COPY_RELATIVE_PATH_COMMAND_ID, REVEAL_IN_EXPLORER_COMMAND_ID, OPEN_WITH_EXPLORER_COMMAND_ID, SAVE_FILE_COMMAND_ID, SAVE_FILE_WITHOUT_FORMATTING_COMMAND_ID, SAVE_FILE_AS_COMMAND_ID, SAVE_ALL_COMMAND_ID, SAVE_ALL_IN_GROUP_COMMAND_ID, SAVE_FILES_COMMAND_ID, REVERT_FILE_COMMAND_ID, REMOVE_ROOT_FOLDER_COMMAND_ID, PREVIOUS_COMPRESSED_FOLDER, NEXT_COMPRESSED_FOLDER, FIRST_COMPRESSED_FOLDER, LAST_COMPRESSED_FOLDER, NEW_UNTITLED_FILE_COMMAND_ID, NEW_UNTITLED_FILE_LABEL, NEW_FILE_COMMAND_ID } from './fileConstants.js';
 import { IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
@@ -626,14 +624,12 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	primary: KeyCode.LeftArrow,
 	id: PREVIOUS_COMPRESSED_FOLDER,
 	handler: accessor => {
-		const paneCompositeService = accessor.get(IPaneCompositePartService);
-		const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
-
-		if (viewlet?.getId() !== VIEWLET_ID) {
+		// Look the Explorer up wherever it is visible, including the bottom half of a split side bar
+		const explorer = accessor.get(IViewsService).getActiveViewPaneContainerWithId(VIEWLET_ID) as ExplorerViewPaneContainer | null;
+		if (!explorer) {
 			return;
 		}
 
-		const explorer = viewlet.getViewPaneContainer() as ExplorerViewPaneContainer;
 		const view = explorer.getExplorerView();
 		view.previousCompressedStat();
 	}
@@ -645,14 +641,12 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	primary: KeyCode.RightArrow,
 	id: NEXT_COMPRESSED_FOLDER,
 	handler: accessor => {
-		const paneCompositeService = accessor.get(IPaneCompositePartService);
-		const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
-
-		if (viewlet?.getId() !== VIEWLET_ID) {
+		// Look the Explorer up wherever it is visible, including the bottom half of a split side bar
+		const explorer = accessor.get(IViewsService).getActiveViewPaneContainerWithId(VIEWLET_ID) as ExplorerViewPaneContainer | null;
+		if (!explorer) {
 			return;
 		}
 
-		const explorer = viewlet.getViewPaneContainer() as ExplorerViewPaneContainer;
 		const view = explorer.getExplorerView();
 		view.nextCompressedStat();
 	}
@@ -664,14 +658,12 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	primary: KeyCode.Home,
 	id: FIRST_COMPRESSED_FOLDER,
 	handler: accessor => {
-		const paneCompositeService = accessor.get(IPaneCompositePartService);
-		const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
-
-		if (viewlet?.getId() !== VIEWLET_ID) {
+		// Look the Explorer up wherever it is visible, including the bottom half of a split side bar
+		const explorer = accessor.get(IViewsService).getActiveViewPaneContainerWithId(VIEWLET_ID) as ExplorerViewPaneContainer | null;
+		if (!explorer) {
 			return;
 		}
 
-		const explorer = viewlet.getViewPaneContainer() as ExplorerViewPaneContainer;
 		const view = explorer.getExplorerView();
 		view.firstCompressedStat();
 	}
@@ -683,14 +675,12 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	primary: KeyCode.End,
 	id: LAST_COMPRESSED_FOLDER,
 	handler: accessor => {
-		const paneCompositeService = accessor.get(IPaneCompositePartService);
-		const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
-
-		if (viewlet?.getId() !== VIEWLET_ID) {
+		// Look the Explorer up wherever it is visible, including the bottom half of a split side bar
+		const explorer = accessor.get(IViewsService).getActiveViewPaneContainerWithId(VIEWLET_ID) as ExplorerViewPaneContainer | null;
+		if (!explorer) {
 			return;
 		}
 
-		const explorer = viewlet.getViewPaneContainer() as ExplorerViewPaneContainer;
 		const view = explorer.getExplorerView();
 		view.lastCompressedStat();
 	}

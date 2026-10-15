@@ -62,6 +62,31 @@
 	margin-bottom: auto;
 }
 
+/** Items of the bottom half of a split side bar, above the global activities */
+
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group {
+	position: relative;
+	flex-shrink: 0;
+	overflow: hidden;
+}
+
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group:not(.empty)::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 25%;
+	width: 50%;
+	border-top: 1px solid var(--vscode-activityBar-inactiveForeground);
+	opacity: 0.5;
+	pointer-events: none;
+}
+
+/* While a view container is dragged, an empty bottom group shows where it can be dropped */
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group.empty.dragging {
+	outline: 1px dashed var(--vscode-activityBar-inactiveForeground);
+	outline-offset: -4px;
+}
+
 /** Menu Bar */
 
 .monaco-workbench .activitybar .menubar {

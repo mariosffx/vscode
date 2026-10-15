@@ -114,6 +114,14 @@ export class AgenticPaneCompositePartService extends Disposable implements IPane
 		return this.getPartByLocation(viewContainerLocation).getLastActivePaneCompositeId();
 	}
 
+	getBottomPaneComposite(viewContainerLocation: ViewContainerLocation): IPaneComposite | undefined {
+		return this.getPartByLocation(viewContainerLocation).getBottomPaneComposite?.();
+	}
+
+	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void {
+		this.getPartByLocation(viewContainerLocation).hideBottomPaneComposite?.();
+	}
+
 	private getPartByLocation(viewContainerLocation: ViewContainerLocation): IPaneCompositePart {
 		return assertReturnsDefined(this.paneCompositeParts.get(viewContainerLocation));
 	}

@@ -6,7 +6,7 @@
 import './media/sidebarpart.css';
 import './sidebarActions.js';
 import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position as SideBarPosition } from '../../../services/layout/browser/layoutService.js';
-import { SidebarFocusContext, ActiveViewletContext } from '../../../common/contextkeys.js';
+import { SidebarFocusContext, ActiveViewletContext, SidebarBottomFocusContext, ActiveViewletBottomContext } from '../../../common/contextkeys.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
@@ -23,7 +23,11 @@ import { IExtensionService } from '../../../services/extensions/common/extension
 import { LayoutPriority } from '../../../../base/browser/ui/grid/grid.js';
 import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
-import { AbstractPaneCompositePart, CompositeBarPosition } from '../paneCompositePart.js';
+import { AbstractPaneCompositePart, CompositeBarPosition, IPaneCompositeSplit } from '../paneCompositePart.js';
+import { PaneCompositeSplit } from '../paneCompositeSplit.js';
+import { IPaneComposite } from '../../../common/panecomposite.js';
+import { Event } from '../../../../base/common/event.js';
+import { IProgressIndicator } from '../../../../platform/progress/common/progress.js';
 import { ActivityBarCompositeBar, ActivitybarPart } from '../activitybar/activitybarPart.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
@@ -68,12 +72,41 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		return Math.max(width, 300);
 	}
 
+	/**
+	 * The bottom half of the side bar, showing the view containers placed in it.
+	 */
+	private readonly split = this._register(this.instantiationService.createInstance(PaneCompositeSplit, {
+		host: this,
+		hostPartId: Parts.SIDEBAR_PART,
+		partId: Parts.SIDEBAR_BOTTOM_PART,
+		location: ViewContainerLocation.Sidebar,
+		registryId: Extensions.Viewlets,
+		storagePrefix: 'workbench.sidebar.bottom',
+		activeContext: ActiveViewletBottomContext,
+		focusContext: SidebarBottomFocusContext,
+		titleMenuId: MenuId.SidebarBottomTitle,
+		partContainerClass: 'sidebar',
+		showCompositeBar: () => this.shouldShowCompositeBar() // the bottom half shows its items in its title when the rail does not
+	}));
+
+	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;
+	readonly onDidBottomPaneCompositeClose: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeClose;
+
 	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this, {
 		partId: Parts.ACTIVITYBAR_PART,
 		pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
 		placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
 		viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
-		globalActivities: true
+		globalActivities: true,
+		split: {
+			bottomPart: this.split.bottomPart,
+			topFilter: this.split.topFilter,
+			bottomFilter: this.split.bottomFilter,
+			bottomPinnedViewContainersKey: this.split.bottomPinnedViewContainersKey,
+			bottomPlaceholderViewContainersKey: this.split.bottomPlaceholderViewContainersKey,
+			bottomViewContainersWorkspaceStateKey: this.split.bottomViewContainersWorkspaceStateKey,
+			getMoveActions: id => this.split.getMoveActions(id)
+		}
 	}));
 	private readonly visibleViewContainersTracker: VisibleViewContainersTracker;
 	private readonly primarySideBarSashClassDisposable = this._register(new MutableDisposable());
@@ -167,7 +200,25 @@ export class SidebarPart extends AbstractPaneCompositePart {
 			this.activityBarPart.show();
 		}
 
+		this.split.refreshCompositeBar();
+
 		this.rememberActivityBarVisiblePosition();
+	}
+
+	protected override getSplit(): IPaneCompositeSplit {
+		return this.split;
+	}
+
+	getBottomPaneComposite(): IPaneComposite | undefined {
+		return this.split.getBottomPaneComposite();
+	}
+
+	hideBottomPaneComposite(): void {
+		this.split.hideBottomPaneComposite();
+	}
+
+	override getProgressIndicator(id: string): IProgressIndicator | undefined {
+		return super.getProgressIndicator(id) ?? this.split.bottomPart.getProgressIndicator(id);
 	}
 
 	override updateStyles(): void {
@@ -210,7 +261,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 	}
 
 	protected override createCompositeBar(): ActivityBarCompositeBar {
-		return this.instantiationService.createInstance(ActivityBarCompositeBar, ViewContainerLocation.Sidebar, this.getCompositeBarOptions(), this.partId, this, undefined);
+		return this.instantiationService.createInstance(ActivityBarCompositeBar, ViewContainerLocation.Sidebar, this.getCompositeBarOptions(), this.partId, this, undefined, undefined);
 	}
 
 	protected getCompositeBarOptions(): IPaneCompositeBarOptions {
@@ -219,6 +270,8 @@ export class SidebarPart extends AbstractPaneCompositePart {
 			pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
 			placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
 			viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
+			filter: this.split.topFilter,
+			transformContextMenuActionsForComposite: (actions, id) => [...actions, ...this.split.getMoveActions(id)],
 			icon: true,
 			orientation: ActionsOrientation.HORIZONTAL,
 			recomputeSizes: true,

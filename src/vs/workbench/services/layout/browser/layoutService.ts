@@ -24,6 +24,10 @@ export const enum Parts {
 	ACTIVITYBAR_PART = 'workbench.parts.activitybar',
 	SIDEBAR_PART = 'workbench.parts.sidebar',
 	AUXILIARY_ACTIVITYBAR_PART = 'workbench.parts.auxiliaryactivitybar',
+	/** The bottom half of a split Primary Side Bar. Lives inside the side bar, not in the workbench grid. */
+	SIDEBAR_BOTTOM_PART = 'workbench.parts.sidebarbottom',
+	/** The bottom half of a split Secondary Side Bar. Lives inside the side bar, not in the workbench grid. */
+	AUXILIARYBAR_BOTTOM_PART = 'workbench.parts.auxiliarybarbottom',
 	PANEL_PART = 'workbench.parts.panel',
 	AUXILIARYBAR_PART = 'workbench.parts.auxiliarybar',
 	SESSIONS_PART = 'workbench.parts.sessions',

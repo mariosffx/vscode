@@ -27,7 +27,8 @@ import { KeyCode } from '../../../../base/common/keyCodes.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { GestureEvent } from '../../../../base/browser/touch.js';
 import { IPaneCompositePart } from '../paneCompositePart.js';
-import { IPaneCompositeBarOptions, PaneCompositeBar } from '../paneCompositeBar.js';
+import { IPaneCompositeBarFilter, IPaneCompositeBarOptions, PaneCompositeBar } from '../paneCompositeBar.js';
+import { CompositeDragAndDropObserver } from '../../dnd.js';
 import { GlobalCompositeBar } from '../globalCompositeBar.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { Action2, IMenuService, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -57,6 +58,31 @@ export interface IActivitybarPartOptions {
 	readonly viewContainersWorkspaceStateKey: string;
 	/** Whether the rail hosts the global activities (Accounts, Manage) and the compact menu bar. */
 	readonly globalActivities: boolean;
+	/** When the side bar can split, the rail shows a second group of items for its bottom half. */
+	readonly split?: IActivitybarSplitOptions;
+}
+
+/**
+ * The bottom group of a rail whose side bar is split into a top and a bottom half. The rail
+ * shows the top half's view containers in its usual group and the bottom half's view
+ * containers in a second group anchored to the bottom of the rail.
+ */
+export interface IActivitybarSplitOptions {
+	readonly bottomPart: IPaneCompositePart;
+	readonly topFilter: IPaneCompositeBarFilter;
+	readonly bottomFilter: IPaneCompositeBarFilter;
+	readonly bottomPinnedViewContainersKey: string;
+	readonly bottomPlaceholderViewContainersKey: string;
+	readonly bottomViewContainersWorkspaceStateKey: string;
+	readonly getMoveActions: (viewContainerId: string) => IAction[];
+}
+
+/**
+ * A second group of items on a vertical rail, for the bottom half of a split side bar.
+ */
+interface IActivityBarBottomGroup {
+	readonly paneCompositePart: IPaneCompositePart;
+	readonly options: IPaneCompositeBarOptions;
 }
 
 export class ActivitybarPart extends Part {
@@ -304,12 +330,15 @@ export class ActivitybarPart extends Part {
 	private createCompositeBar(): PaneCompositeBar {
 		const compositeSize = this.compositeSize;
 		const iconSize = this._isCompact ? ActivitybarPart.COMPACT_ICON_SIZE : ActivitybarPart.ICON_SIZE;
+		const split = this.railOptions.split;
 
-		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.location, {
+		const options: IPaneCompositeBarOptions = {
 			partContainerClass: 'activitybar',
 			pinnedViewContainersKey: this.railOptions.pinnedViewContainersKey,
 			placeholderViewContainersKey: this.railOptions.placeholderViewContainersKey,
 			viewContainersWorkspaceStateKey: this.railOptions.viewContainersWorkspaceStateKey,
+			filter: split?.topFilter,
+			transformContextMenuActionsForComposite: split ? (actions, id) => [...actions, ...split.getMoveActions(id)] : undefined,
 			orientation: ActionsOrientation.VERTICAL,
 			icon: true,
 			iconSize,
@@ -331,7 +360,20 @@ export class ActivitybarPart extends Part {
 				activeBackgroundColor: undefined, inactiveBackgroundColor: undefined, activeBorderBottomColor: undefined,
 			}),
 			overflowActionSize: compositeSize,
-		}, this.partId, this.paneCompositePart, this.railOptions.globalActivities ? { actionHeight: this.actionHeight, actionGap: this.actionGap } : undefined);
+		};
+
+		const bottomGroup: IActivityBarBottomGroup | undefined = split ? {
+			paneCompositePart: split.bottomPart,
+			options: {
+				...options,
+				pinnedViewContainersKey: split.bottomPinnedViewContainersKey,
+				placeholderViewContainersKey: split.bottomPlaceholderViewContainersKey,
+				viewContainersWorkspaceStateKey: split.bottomViewContainersWorkspaceStateKey,
+				filter: split.bottomFilter,
+			}
+		} : undefined;
+
+		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.location, options, this.partId, this.paneCompositePart, this.railOptions.globalActivities ? { actionHeight: this.actionHeight, actionGap: this.actionGap } : undefined, bottomGroup);
 	}
 
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
@@ -476,12 +518,17 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 
 	private readonly keyboardNavigationDisposables = this._register(new DisposableStore());
 
+	private readonly bottomCompositeBar: PaneCompositeBar | undefined;
+	private bottomGroupContainer: HTMLElement | undefined;
+	private bottomGroupItemCount = 0;
+
 	constructor(
 		location: ViewContainerLocation,
 		options: IPaneCompositeBarOptions,
 		part: Parts,
 		paneCompositePart: IPaneCompositePart,
 		private readonly globalActivities: { readonly actionHeight: number; readonly actionGap: number } | undefined,
+		bottomGroup: IActivityBarBottomGroup | undefined,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IStorageService storageService: IStorageService,
 		@IExtensionService extensionService: IExtensionService,
@@ -507,6 +554,22 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 			this._register(this.globalCompositeBar.onDidChange(() => {
 				if (this.lastLayoutDimensions) {
 					this.layout(this.lastLayoutDimensions.width, this.lastLayoutDimensions.height);
+				}
+			}));
+		}
+
+		if (bottomGroup) {
+			this.bottomCompositeBar = this._register(instantiationService.createInstance(PaneCompositeBar, location, {
+				...bottomGroup.options,
+				fillExtraContextMenuActions: (actions, e) => {
+					bottomGroup.options.fillExtraContextMenuActions(actions, e);
+					this.fillContextMenuActions(actions, e);
+				}
+			}, part, bottomGroup.paneCompositePart));
+			this._register(this.bottomCompositeBar.onDidChangeComposites(() => {
+				// The bar reports every re-render, so only relayout when its size has to change
+				if (this.bottomCompositeBar?.getVisiblePaneCompositeIds().length !== this.bottomGroupItemCount) {
+					this.relayout();
 				}
 			}));
 		}
@@ -626,6 +689,24 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		// View Containers action bar
 		this.compositeBarContainer = super.create(this.element);
 
+		// View Containers of the bottom half of a split side bar
+		if (this.bottomCompositeBar) {
+			const bottomGroupContainer = this.bottomGroupContainer = append(this.element, $('.composite-bar-bottom-group'));
+			this.bottomCompositeBar.create(bottomGroupContainer);
+
+			// While a view container is dragged, an empty group shows room for one item to drop on
+			this._register(CompositeDragAndDropObserver.INSTANCE.registerTarget(bottomGroupContainer, {
+				onDragStart: () => {
+					bottomGroupContainer.classList.add('dragging');
+					this.relayout();
+				},
+				onDragEnd: () => {
+					bottomGroupContainer.classList.remove('dragging');
+					this.relayout();
+				}
+			}));
+		}
+
 		// Global action bar
 		if (this.globalCompositeBar) {
 			this.globalCompositeBar.create(this.element);
@@ -635,6 +716,12 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		this.registerKeyboardNavigationListeners();
 
 		return this.compositeBarContainer;
+	}
+
+	private relayout(): void {
+		if (this.lastLayoutDimensions) {
+			this.layout(this.lastLayoutDimensions.width, this.lastLayoutDimensions.height);
+		}
 	}
 
 	override layout(width: number, height: number): void {
@@ -653,6 +740,19 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 			} else {
 				width -= this.globalCompositeBar.element.clientWidth;
 			}
+		}
+		if (this.bottomCompositeBar && this.bottomGroupContainer) {
+			// The bottom group takes the room of its items, at most half of the rail. While
+			// dragging, an empty group offers room for one item, but only room the top group
+			// does not need, so dragging never pushes a top item into the overflow.
+			const itemCount = this.bottomGroupItemCount = this.bottomCompositeBar.getVisiblePaneCompositeIds().length;
+			const spareHeight = height - this.getVisiblePaneCompositeIds().length * this.options.compositeSize;
+			const dropZone = itemCount === 0 && this.bottomGroupContainer.classList.contains('dragging') && spareHeight >= 2 * this.options.compositeSize ? 1 : 0;
+			const bottomHeight = Math.max(0, Math.min((itemCount + dropZone) * this.options.compositeSize, Math.floor(height / 2)));
+			this.bottomGroupContainer.style.height = `${bottomHeight}px`;
+			this.bottomGroupContainer.classList.toggle('empty', itemCount === 0);
+			this.bottomCompositeBar.layout(width, bottomHeight);
+			height -= bottomHeight;
 		}
 		super.layout(width, height);
 	}

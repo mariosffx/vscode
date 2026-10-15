@@ -68,6 +68,24 @@ if [ "$current" != "main" ] && [ -n "$current" ]; then
 fi
 """
 
+[tasks.update]
+description = "Everything in one go: sync upstream, rebase this branch, push it to the fork, install deps, full build"
+shell = "bash -c"
+depends = ["upstream:rebase"]
+run = """
+set -euo pipefail
+current=$(git branch --show-current)
+if [ "$current" != "main" ] && [ -n "$current" ] && git rev-parse --verify --quiet "origin/$current" >/dev/null; then
+	echo "==> pushing rebased $current to origin"
+	git push --force-with-lease origin "$current"
+fi
+echo "==> installing dependencies"
+npm run install-fast
+echo "==> full build"
+npm run compile
+echo "==> up to date and built; launch with: mise run start"
+"""
+
 # ---------------------------------------------------------------------------
 # Building and running
 # ---------------------------------------------------------------------------

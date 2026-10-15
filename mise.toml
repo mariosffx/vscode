@@ -150,12 +150,14 @@ run = "exec env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh"
 # ---------------------------------------------------------------------------
 
 [tasks."release:compile"]
-description = "Optional: CI-style production type check and bundles (the release:* tasks compile on their own)"
+description = "Install dependencies, then the CI-style production type check and bundles that packaging builds on"
+depends = ["install"]
 run = "npm run gulp core-ci"
 
 [tasks."release:linux"]
 description = "Package a standalone Linux x64 app folder at ../VSCode-linux-x64 (run ../VSCode-linux-x64/code-oss)"
 shell = "bash -c"
+depends = ["release:compile"]
 run = """
 set -euo pipefail
 npm run gulp vscode-linux-x64-min
@@ -202,39 +204,28 @@ run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/
 # ---------------------------------------------------------------------------
 # Install the packaged build on this machine
 #
-# Both tasks reuse the newest package when it was built from the current commit
-# and rebuild it otherwise, so an outdated build is never installed by accident.
+# Each task is the whole pipeline in one command: install dependencies, compile,
+# package a fresh build and install it.
 # ---------------------------------------------------------------------------
 
 [tasks."install:debian"]
-description = "Install the .deb on this machine (rebuilds it first when missing or built from another commit); asks for sudo"
+description = "One command: install dependencies, compile, package a fresh .deb and install it on this machine (10-20 minutes; asks for sudo)"
 shell = "bash -c"
 raw = true # lets sudo prompt for the password
+depends = ["release:debian"] # which runs install, release:compile and release:linux first
 run = """
 set -euo pipefail
-head=$(git rev-parse HEAD)
-packaged=$(node -p "try { require('../VSCode-linux-x64/resources/app/product.json').commit } catch { '' }")
-deb=$(ls -1t .build/linux/deb/amd64/deb/*.deb 2>/dev/null | head -n1 || true)
-if [ -n "$(git status --porcelain -- src extensions)" ]; then
-	echo "warning: uncommitted changes in src/ or extensions/ are not detected; commit them or run 'mise run release:debian' to include them" >&2
-fi
-if [ -z "$deb" ] || [ "$packaged" != "$head" ]; then
-	echo "==> package missing or built from ${packaged:-nothing}, HEAD is $head: building"
-	mise run release:debian
-	deb=$(ls -1t .build/linux/deb/amd64/deb/*.deb | head -n1)
-else
-	echo "==> reusing $deb (built from HEAD)"
-fi
+deb=$(ls -1t .build/linux/deb/amd64/deb/*.deb | head -n1)
 echo "==> installing $deb"
 sudo apt install -y "./$deb"
 echo "==> installed: $(dpkg -s code-oss | sed -n 's/^Version: //p'); launch with 'code-oss' or from your app menu"
 """
 
 [tasks."install:windows"]
-description = "Install Code - OSS for the current user on Windows (rebuilds the installer first when missing or built from another commit)"
+description = "One command on Windows: install dependencies, compile, package a fresh installer and install it for the current user (10-20 minutes)"
 run = """
 echo "error: install:windows must run on a Windows machine." >&2
-echo "       There: clone the fork, run 'mise run install', then 'mise run install:windows'." >&2
+echo "       There: clone the fork and run 'mise run install:windows'." >&2
 exit 1
 """
 run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/install-windows.ps1"

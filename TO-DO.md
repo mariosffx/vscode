@@ -10,7 +10,7 @@ Last updated: 2026-10-15.
 |---|---|---|
 | 1 | Vertical Secondary Activity Bar beside the Secondary Side Bar, independent position setting | Done, follow-ups below |
 | 1.1 | Fixes and tests from the Phase 1 review | Not started |
-| 2 | Four-corner tool windows: lower Primary and lower Secondary Side Bar, top and bottom icon groups per rail | Planned, open questions first |
+| 2 | Split side bars: a resizable top and bottom half in each side bar, with top and bottom icon groups per rail | Done, follow-ups below |
 | Tooling | mise tasks for upstream sync, build, release, install | Done, Windows tasks unverified |
 
 ## Phase 1.1: Secondary Activity Bar follow-ups
@@ -21,7 +21,7 @@ Last updated: 2026-10-15.
 
 ### Behavior
 
-- [ ] **Clicking the active rail icon should collapse the Secondary Side Bar**, like the primary rail does. `src/vs/workbench/browser/parts/paneCompositeBar.ts` around line 814 only special-cases `Parts.ACTIVITYBAR_PART`. Map each rail to its side bar and honour `workbench.activityBar.iconClickBehavior` for both.
+- [x] **Clicking the active rail icon should collapse the Secondary Side Bar**, like the primary rail does. Done with the split side bar work. `src/vs/workbench/browser/parts/paneCompositeBar.ts` around line 814 only special-cases `Parts.ACTIVITYBAR_PART`. Map each rail to its side bar and honour `workbench.activityBar.iconClickBehavior` for both.
 - [ ] **Hide the rail when the Secondary Side Bar has no view containers.** Today an empty location still shows an empty rail. `AuxiliaryBarPart` already has a `VisibleViewContainersTracker` to drive this. Consider honouring `workbench.activityBar.autoHide` with one container too.
 - [ ] **Restore sash snap-open for the Secondary Side Bar.** In the default rail position its own composite bar is gone, so the inherited `snap` getter in `paneCompositePart.ts` sees no containers. Override `snap` in `AuxiliaryBarPart` to use the delegating `getVisiblePaneCompositeIds()`.
 - [ ] **Stop the new setting from forcing the custom title bar on.** Choosing `top` or `bottom` for the secondary position flips `window.customTitleBarVisibility` from `never`, which the side bar header does not need. Remove the new setting from `TITLE_BAR_SETTINGS` and the forcing condition in `src/vs/workbench/browser/layout.ts`, and from `isTitleBarEmpty()` in `layoutService.ts`.
@@ -49,41 +49,33 @@ Follow the existing snapshot style: one `assert.deepStrictEqual` per behavior.
 
 - [ ] Both rails announce the same accessible name. Pass a distinct label such as "Secondary Side Bar View Switcher" through `IActivitybarPartOptions`. *Only one of two reviewers upheld this.*
 
-## Phase 2: four-corner tool windows
+## Phase 2: split side bars (lighter design)
 
-Goal: drag any view container to left-top, left-bottom, right-top or right-bottom and keep up to four side panes open at once. Two new view container locations hold the lower corners, as parts stacked under the existing side bars in the same grid column with a sash, hidden when empty. Each vertical rail gets a top icon group and a bottom icon group. The Panel stays as is; its containers can already be dragged into side bars.
+Each side bar splits into a top and a bottom half that each show one view container, with a sash between them to resize. A right-click "Move to Bottom Half" on a rail icon, or a drag onto a rail's bottom icon group, puts a container in the bottom half. There are no new view container locations and no new workbench grid parts: the bottom half is a pane composite part nested inside its side bar, and a per-profile list decides which half a container lives in. This replaced the heavier four-location plan, which would have touched far more of the workbench.
 
-### Decide first
+### Done
 
-These answers change the implementation, so settle them before writing code.
+- [x] Bottom half for the Primary and the Secondary Side Bar, with its own title, toolbar, empty state and a close button.
+- [x] Resizable split: drag the sash, double-click it to reset to half and half. The ratio is remembered per profile.
+- [x] Bottom icon group on each vertical rail, above Accounts and Manage. Clicking the active icon closes the bottom half. While dragging, an empty group shows a drop zone.
+- [x] Move containers between halves by drag and drop or the "Move to Top Half" / "Move to Bottom Half" context menu actions, including drops from other locations and of single views.
+- [x] Opening a bottom-half container from anywhere (commands, keyboard shortcuts, views service) opens it in the bottom half. The views service treats it as visible, so features like revealing a file in a bottom-half Explorer work.
+- [x] Hiding a side bar closes its bottom half too, and showing it restores the bottom half. Reloading restores both halves, the split size and the icon groups.
+- [x] With the rail at the top, at the bottom or in the title, the bottom half shows its icons in its own title.
+- [x] Unit tests for the stored assignment and the split height math.
+- [x] Fixes from an adversarial review: opening a bottom container while the side bar is hidden, keeping the top half filled on startup and reopen, moving between halves without opening the default container, reconciling assignment changes from other windows, progress bars, the view toggle shortcuts, Explorer compressed-folder keys, view drop position, and drag drop-zone sizing.
 
-1. **Persistence.** Store the new locations as new numbers in the synced `views.customizations` key, or keep the column number there and store the lower slot in a fork-only field? New numbers crash stock VS Code and older fork builds when Settings Sync carries them over. The fork-only field is the safer choice. If it is a separate key, does it sync or stay per machine?
-2. **Context key.** New `viewContainerLocation` values break existing when-clauses such as `viewContainerLocation == sidebar` in core and in extensions. Reusing the column value plus a separate slot key avoids that.
-3. **Naming.** "Lower", "Bottom", or JetBrains-style corner names for the enum, parts, commands and labels.
-4. **Toggles.** Does Ctrl+B hide the whole left column or only the upper part? Is each corner toggled independently?
-5. **Sizing.** Does the lower part fill the column when the upper one is hidden? Is the split ratio stored per workspace or per profile, and what is the default?
-6. **Non-vertical rails.** Where do the lower group's icons go when a rail is at the top, bottom, title or hidden: a second title bar on the lower part, or merged into the upper title?
-7. **Maximize, Zen mode, centered layout.** Should Maximize Secondary Side Bar include the lower part, and what do Zen mode and centered layout do with the lower parts?
-8. **Visibility.** Should moving a container into a hidden lower part reveal it, and should a user-hidden lower part stay hidden while it still has content?
-9. **Extensions.** Should extensions be able to contribute directly to the lower corners through new `viewsContainers` keys? Recommendation: no, keep the extension contract identical to upstream.
-10. **Sessions window.** Support the lower locations in `src/vs/sessions`, or map them to the column so nothing throws there?
-11. **Panel containers.** Offer them as targets for the lower corners in move menus and drag and drop?
+### Remaining
 
-### Implementation plan
-
-Risk is noted per step. Steps 2, 4 and 5 carry most of it.
-
-1. [ ] **Locations and helpers** *(medium)*. Append two values to `ViewContainerLocation` in `src/vs/workbench/common/views.ts` so stored numbers stay valid. Extend `ViewContainerLocationToString`, which has no default case. Add helpers mapping a lower location to its column, plus one list of all locations to replace the hard-coded lists in `paneCompositePartService.ts` and `paneCompositeBar.ts`.
-2. [ ] **Safe persistence, before any UI** *(high)*. Implement the decision on question 1 in `src/vs/workbench/services/views/browser/viewDescriptorService.ts`. Sanitize every read so an unknown location falls back to the container's default, at construction, on storage change and for generated containers. Update save, reset and move telemetry. Test a round trip, an unknown value, and a storage change without the slot field.
-3. [ ] **Two lower pane composite parts** *(medium)*. New `Parts` values, parts built by parameterizing `SidebarPart` and `AuxiliaryBarPart` with an options object as `ActivitybarPart` now is, their own storage keys, context keys, title menus and pane composite registries. Wire into `PaneCompositePartService`, `workbench.ts`, the sessions window's service and the test services.
-4. [ ] **Stack them in the grid** *(high)*. In `layout.ts`, replace each side bar leaf with a vertical branch, add state keys for hidden, size and empty, and re-attach the lower view after every grid move: side bar position flip, panel position change, size restore. Extend visibility, focus, resize, saved sizes, startup restore, and hide-when-empty.
-5. [ ] **Top and bottom icon groups on each rail** *(high)*. Add an optional lower group to `IActivitybarPartOptions`, render it anchored to the bottom of the rail with a separator, split the overflow height, show a drop zone for an empty group during drag, and fall back to a title composite bar when a rail is not vertical. Add the lower locations to the composite bar's move menu.
-6. [ ] **Update every location switch** *(medium)*. Route through the column helper unless a site needs part-specific behavior. Sites include the views service, view pane and container, terminal group, chat view pane, chat actions, chat input, layout actions, view quick access, navigation, panel and auxiliary bar actions, and view menu actions.
-7. [ ] **Drag and drop to all four corners** *(medium)*. One drop handler per rail group, plus a "dock to bottom" drop target over the lower portion of an upper side bar for both containers and single views. Reveal a hidden lower part on drop.
-8. [ ] **Modern UI floating cards** *(medium)*. Treat the seam between stacked cards as inner edges, include lower parts in edge ownership, add CSS for the gap and sash, extend the layout service tests.
-9. [ ] **Commands, context keys, menus** *(low)*. Toggle and focus commands per lower part, visibility and active-container context keys, View > Appearance entries, an optional default split ratio setting. Make maximize, Zen mode and centered layout consistent with the answers above.
-10. [ ] **Extension point** *(low)*. Implement or explicitly skip new `viewsContainers` keys per question 9, and make sure contribution order counters ignore containers sitting in lower locations.
-11. [ ] **Tests and manual checks** *(medium)*. Unit tests for persistence, two-group rails including drops into an empty group, the new parts' storage keys, and floating margins. The grid composition has no unit tests, so check by hand with the launch skill: side bar flip, panel position and alignment, maximize, Zen mode, and a restart that restores all four corners.
+- [ ] **Keyboard navigation** between the rail's top and bottom icon groups with the arrow keys. Today the bottom group is reachable with Tab only.
+- [ ] **Commands** to focus the bottom half and to move the focused view container to the other half, so the feature is usable without a mouse.
+- [ ] **Title context menu** of each half could offer "Move to Top Half" / "Move to Bottom Half" too; today those actions live on the rail icons only.
+- [ ] **Code that asks for the single active view container** still sees only the top half. The views service is covered; a few features call the pane composite service directly, for example chat, to check whether their container is showing. Find and update them as they come up.
+- [ ] **Startup splash** paints neither half separately.
+- [ ] **Move View pickers.** "View: Move View" and "View: Move Focused View" list only top-half containers, because the pane composite service's id lists come from the top group. Make those lists include bottom-half ids, without changing what "Next/Previous Side Bar View" cycles through.
+- [ ] **Secondary Side Bar empty check.** When every Secondary Side Bar container sits in the bottom half, layout.ts records the bar as empty, so new windows start with it hidden. Count both halves there.
+- [ ] **Accessibility help in the bottom half.** Several Alt+F1 help providers key off `sideBarFocus` plus the top half's active container, so focus in the bottom half shows help for the top half's container. Use `sideBarBottomFocus` and `activeViewletBottom` in those when-clauses.
+- [ ] **Integration test** with the launch skill that scripts the manual checks: move, drag, resize, close, reload.
 
 ## Fork tooling
 

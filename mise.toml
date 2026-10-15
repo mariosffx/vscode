@@ -229,3 +229,14 @@ echo "       There: clone the fork and run 'mise run install:windows'." >&2
 exit 1
 """
 run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/install-windows.ps1"
+
+# ---------------------------------------------------------------------------
+# Settings
+#
+# Code - OSS can't use Microsoft's Settings Sync, so profiles are copied over
+# from the VS Code installed on this machine instead.
+# ---------------------------------------------------------------------------
+
+[tasks."sync:profiles"]
+description = "Copy every VS Code profile (settings, keybindings, snippets, tasks, MCP servers, extensions) into Code - OSS; quit Code - OSS first, pass --dry-run to preview"
+run = "node scripts/mise/sync-profiles.mts"

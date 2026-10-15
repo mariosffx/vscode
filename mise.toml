@@ -233,10 +233,10 @@ run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/
 # ---------------------------------------------------------------------------
 # Settings
 #
-# Code - OSS can't use Microsoft's Settings Sync, so profiles are copied over
-# from the VS Code installed on this machine instead.
+# Code - OSS can't use Microsoft's Settings Sync, so profiles are synced with
+# the VS Code installed on this machine instead, in both directions.
 # ---------------------------------------------------------------------------
 
 [tasks."sync:profiles"]
-description = "Copy every VS Code profile (settings, keybindings, snippets, tasks, MCP servers, extensions) into Code - OSS; quit Code - OSS first, pass --dry-run to preview"
+description = "Two-way sync of all profiles (settings, keybindings, snippets, tasks, MCP servers, extensions) between VS Code and Code - OSS; the most recent change wins. Pass --dry-run to preview"
 run = "node scripts/mise/sync-profiles.mts"

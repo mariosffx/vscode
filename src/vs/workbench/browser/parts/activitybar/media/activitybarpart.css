@@ -70,21 +70,24 @@
 	overflow: hidden;
 }
 
-.monaco-workbench .activitybar > .content > .composite-bar-bottom-group:not(.empty)::before {
+/* The free space above already sets the bottom group apart from the top group. What needs a
+ * cue is the edge it shares with the global activities (Accounts, Manage) below it: a quiet
+ * separator at the border tier, as between groups of menu actions. */
+.monaco-workbench .activitybar > .content > .composite-bar-bottom-group:not(.empty):not(:last-child)::after {
 	content: '';
 	position: absolute;
-	top: 0;
+	bottom: 0;
 	left: 25%;
 	width: 50%;
-	border-top: 1px solid var(--vscode-activityBar-inactiveForeground);
-	opacity: 0.5;
+	border-bottom: 1px solid var(--vscode-menu-separatorBackground, var(--vscode-widget-border, transparent));
 	pointer-events: none;
 }
 
 /* While a view container is dragged, an empty bottom group shows where it can be dropped */
 .monaco-workbench .activitybar > .content > .composite-bar-bottom-group.empty.dragging {
-	outline: 1px dashed var(--vscode-activityBar-inactiveForeground);
+	outline: 1px dashed var(--vscode-activityBar-dropBorder, var(--vscode-activityBar-inactiveForeground));
 	outline-offset: -4px;
+	border-radius: var(--vscode-cornerRadius-medium, 4px);
 }
 
 /** Menu Bar */

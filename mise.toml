@@ -1,0 +1,123 @@
+[tools]
+node = "24.18.0"
+
+# ---------------------------------------------------------------------------
+# Upstream (microsoft/vscode) tracking
+#
+# Remotes: `upstream` = microsoft/vscode, `origin` = your fork.
+# `main` is kept as a clean mirror of upstream/main; your own work lives on
+# feature branches that get rebased on top of it.
+# ---------------------------------------------------------------------------
+
+[tasks."upstream:sync"]
+description = "Fetch microsoft/vscode, fast-forward local main to upstream/main and push it to the fork"
+shell = "bash -c"
+run = """
+set -euo pipefail
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+	echo "error: working tree has uncommitted changes; commit or stash them first" >&2
+	exit 1
+fi
+current=$(git branch --show-current)
+echo "==> fetching upstream"
+git fetch --prune upstream
+echo "==> updating main from upstream/main"
+if [ "$current" = "main" ]; then
+	git merge --ff-only upstream/main
+else
+	# update main without checking it out; fails if it would not be a fast-forward
+	git fetch . upstream/main:main
+fi
+echo "==> pushing main to origin (fork)"
+git push origin main:main
+echo "==> main is at $(git rev-parse --short main): $(git log -1 --format=%s main)"
+"""
+
+[tasks."upstream:rebase"]
+description = "Sync upstream, then rebase the current feature branch onto main"
+shell = "bash -c"
+depends = ["upstream:sync"]
+run = """
+set -euo pipefail
+current=$(git branch --show-current)
+if [ "$current" = "main" ] || [ -z "$current" ]; then
+	echo "nothing to rebase: check out a feature branch first" >&2
+	exit 1
+fi
+behind=$(git rev-list --count "$current..main")
+if [ "$behind" = "0" ]; then
+	echo "==> $current is already up to date with main"
+	exit 0
+fi
+echo "==> rebasing $current onto main ($behind new upstream commits)"
+git rebase main
+echo "==> done. Push with: git push --force-with-lease origin $current"
+"""
+
+[tasks."upstream:status"]
+description = "Show how far main and the current branch are from upstream"
+shell = "bash -c"
+run = """
+set -euo pipefail
+git fetch --quiet --prune upstream
+echo "upstream/main: $(git log -1 --format='%h %s' upstream/main)"
+echo "main:          $(git log -1 --format='%h %s' main)  (behind upstream by $(git rev-list --count main..upstream/main))"
+current=$(git branch --show-current)
+if [ "$current" != "main" ] && [ -n "$current" ]; then
+	echo "$current: $(git rev-list --count main..$current) own commits, $(git rev-list --count $current..main) commits behind main"
+fi
+"""
+
+# ---------------------------------------------------------------------------
+# Building and running
+# ---------------------------------------------------------------------------
+
+[tasks.install]
+description = "Install dependencies (skips when already up to date)"
+run = "npm run install-fast"
+
+[tasks.build]
+description = "Full build: client plus all built-in extensions (needed before `mise run start`)"
+run = "npm run compile"
+
+[tasks."build:fast"]
+description = "Quick client-only transpile into out/ (enough for unit tests, not for launching)"
+run = "npm run build-fast -- --client-only"
+
+[tasks.watch]
+description = "Incremental watch build of client and extensions"
+run = "npm run watch"
+
+[tasks.typecheck]
+description = "Type-check the client sources under src/"
+run = "npm run typecheck-client"
+
+[tasks.lint]
+description = "Lint the files changed on this branch relative to main"
+shell = "bash -c"
+run = """
+set -euo pipefail
+files=$(git diff --name-only main...HEAD -- '*.ts' | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+if [ -z "$files" ]; then echo "no changed TypeScript files"; exit 0; fi
+npm run eslint -- $files
+"""
+
+[tasks.test]
+description = "Run unit tests; pass a grep pattern, e.g. `mise run test ActivitybarPart`"
+shell = "bash -c"
+# mise appends task arguments to the end of the script, so the last line is a
+# function call that receives them as positional parameters.
+run = """
+run_tests() {
+	if [ $# -gt 0 ]; then
+		env -u ELECTRON_RUN_AS_NODE ./scripts/test.sh --grep "$1"
+	else
+		env -u ELECTRON_RUN_AS_NODE ./scripts/test.sh
+	fi
+}
+run_tests"""
+
+[tasks.start]
+description = "Launch Code OSS from the build output (run `mise run build` first); extra args go to code.sh"
+shell = "bash -c"
+run = "exec env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh"

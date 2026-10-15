@@ -139,3 +139,102 @@ run_tests"""
 description = "Launch Code OSS from the build output (run `mise run build` first); extra args go to code.sh"
 shell = "bash -c"
 run = "exec env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh"
+
+# ---------------------------------------------------------------------------
+# Release packaging (standalone app folders and installers)
+#
+# These bundle the compiled sources together with Electron into a real,
+# installable app. They are slow (10-20 minutes) and always start from a
+# fresh production compile, so use the dev build (`mise run start`) for
+# day-to-day work and these only when you want something to install.
+# ---------------------------------------------------------------------------
+
+[tasks."release:compile"]
+description = "Optional: CI-style production type check and bundles (the release:* tasks compile on their own)"
+run = "npm run gulp core-ci"
+
+[tasks."release:linux"]
+description = "Package a standalone Linux x64 app folder at ../VSCode-linux-x64 (run ../VSCode-linux-x64/code-oss)"
+shell = "bash -c"
+run = """
+set -euo pipefail
+npm run gulp vscode-linux-x64-min
+echo "==> app folder: $(cd .. && pwd)/VSCode-linux-x64  (launch: ../VSCode-linux-x64/code-oss)"
+"""
+
+[tasks."release:debian"]
+description = "Build a .deb package (needs fakeroot and dpkg-deb); output in .build/linux/deb/amd64/deb/"
+shell = "bash -c"
+depends = ["release:linux"]
+run = """
+set -euo pipefail
+for tool in fakeroot dpkg-deb; do
+	command -v "$tool" >/dev/null || { echo "error: $tool not found; install with: sudo apt install fakeroot dpkg" >&2; exit 1; }
+done
+# dpkg-shlibdeps crashes against the Debian 11 sysroot on newer Ubuntu; use the committed
+# dependency list instead (see build/linux/dependencies-generator.ts)
+VSCODE_LINUX_DEPS_FROM_REFERENCE=1 npm run gulp vscode-linux-x64-prepare-deb
+npm run gulp vscode-linux-x64-build-deb
+echo "==> package: $(ls -1 .build/linux/deb/amd64/deb/*.deb)  (install: sudo apt install ./<file>.deb)"
+"""
+
+[tasks."release:rpm"]
+description = "Build an .rpm package (needs rpmbuild); output in .build/linux/rpm/x86_64/"
+shell = "bash -c"
+depends = ["release:linux"]
+run = """
+set -euo pipefail
+command -v rpmbuild >/dev/null || { echo "error: rpmbuild not found; install with: sudo apt install rpm" >&2; exit 1; }
+VSCODE_LINUX_DEPS_FROM_REFERENCE=1 npm run gulp vscode-linux-x64-prepare-rpm
+npm run gulp vscode-linux-x64-build-rpm
+echo "==> package: $(ls -1 .build/linux/rpm/x86_64/*.rpm)"
+"""
+
+[tasks."release:windows"]
+description = "Package Windows x64: app folder at ../VSCode-win32-x64 plus a per-user installer (runs on Windows only)"
+# no `shell` here: it would also apply to run_windows
+run = """
+echo "error: release:windows must run on a Windows machine." >&2
+echo "       There: clone the fork, run 'mise run install', then 'mise run release:windows'." >&2
+exit 1
+"""
+run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/release-windows.ps1"
+# ---------------------------------------------------------------------------
+# Install the packaged build on this machine
+#
+# Both tasks reuse the newest package when it was built from the current commit
+# and rebuild it otherwise, so an outdated build is never installed by accident.
+# ---------------------------------------------------------------------------
+
+[tasks."install:debian"]
+description = "Install the .deb on this machine (rebuilds it first when missing or built from another commit); asks for sudo"
+shell = "bash -c"
+raw = true # lets sudo prompt for the password
+run = """
+set -euo pipefail
+head=$(git rev-parse HEAD)
+packaged=$(node -p "try { require('../VSCode-linux-x64/resources/app/product.json').commit } catch { '' }")
+deb=$(ls -1t .build/linux/deb/amd64/deb/*.deb 2>/dev/null | head -n1 || true)
+if [ -n "$(git status --porcelain -- src extensions)" ]; then
+	echo "warning: uncommitted changes in src/ or extensions/ are not detected; commit them or run 'mise run release:debian' to include them" >&2
+fi
+if [ -z "$deb" ] || [ "$packaged" != "$head" ]; then
+	echo "==> package missing or built from ${packaged:-nothing}, HEAD is $head: building"
+	mise run release:debian
+	deb=$(ls -1t .build/linux/deb/amd64/deb/*.deb | head -n1)
+else
+	echo "==> reusing $deb (built from HEAD)"
+fi
+echo "==> installing $deb"
+sudo apt install -y "./$deb"
+echo "==> installed: $(dpkg -s code-oss | sed -n 's/^Version: //p'); launch with 'code-oss' or from your app menu"
+"""
+
+[tasks."install:windows"]
+description = "Install Code - OSS for the current user on Windows (rebuilds the installer first when missing or built from another commit)"
+run = """
+echo "error: install:windows must run on a Windows machine." >&2
+echo "       There: clone the fork, run 'mise run install', then 'mise run install:windows'." >&2
+exit 1
+"""
+run_windows = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mise/install-windows.ps1"

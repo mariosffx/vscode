@@ -72,6 +72,20 @@
 	border-bottom-right-radius: 0;
 }
 
+/* The secondary side bar meets its own rail (the secondary activity bar) the same way. */
+.monaco-workbench.floating-panels:not(.noauxiliaryactivitybar) .part.auxiliarybar.left {
+	--modern-ui-floating-card-seam-left-color: transparent;
+	margin-left: var(--modern-ui-floating-card-inner-margin);
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+.monaco-workbench.floating-panels:not(.noauxiliaryactivitybar) .part.auxiliarybar.right {
+	--modern-ui-floating-card-seam-right-color: transparent;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
 /* Keep the panel surface aligned with the panel theme background in light theme. */
 .monaco-workbench.floating-panels .part.panel {
 	margin: var(--modern-ui-floating-card-inner-margin) var(--modern-ui-floating-card-inner-margin) var(--modern-ui-floating-card-margin) var(--modern-ui-floating-card-margin);
@@ -266,10 +280,11 @@
 	border-bottom-left-radius: var(--vscode-cornerRadius-large);
 }
 
-/* With the primary side bar collapsed there is no card to connect to, so the rail closes up
+/* With its side bar collapsed there is no card to connect to, so the rail closes up
  * as a standalone panel with every corner rounded. Its border is already opaque on all four
  * sides. Compact density keeps its cards joined edge to edge, so it is excluded. */
-.monaco-workbench.floating-panels:not(.modern-ui-compact).nosidebar .part.activitybar {
+.monaco-workbench.floating-panels:not(.modern-ui-compact).nosidebar .part.activitybar:not(.auxiliaryactivitybar),
+.monaco-workbench.floating-panels:not(.modern-ui-compact).noauxiliarybar .part.auxiliaryactivitybar {
 	border-radius: var(--vscode-cornerRadius-large);
 }
 
@@ -278,7 +293,8 @@
  * leading-margin convention it has to supply that gap itself. The extra width this needs is
  * reserved by `ActivitybarPart.needsFloatingLeadingGap`, so the card keeps its full lane and
  * the icons keep the same inset as every other state. */
-.monaco-workbench.floating-panels:not(.modern-ui-compact).nosidebar .part.activitybar.right {
+.monaco-workbench.floating-panels:not(.modern-ui-compact).nosidebar .part.activitybar.right:not(.auxiliaryactivitybar),
+.monaco-workbench.floating-panels:not(.modern-ui-compact).noauxiliarybar .part.auxiliaryactivitybar.right {
 	margin-left: var(--modern-ui-floating-card-margin);
 }
 
@@ -497,11 +513,13 @@
  * instead, so it takes the seam over — and the side bar gives up that edge — to keep the seam
  * colored by `modernActivityBar.border` in both positions. With no side bar the rail's
  * neighbour is the editor, which paints the seam itself, so the edge stays suppressed. */
-.monaco-workbench.floating-panels.modern-ui-compact:not(.nosidebar) .part.activitybar.right {
+.monaco-workbench.floating-panels.modern-ui-compact:not(.nosidebar) .part.activitybar.right:not(.auxiliaryactivitybar),
+.monaco-workbench.floating-panels.modern-ui-compact:not(.noauxiliarybar) .part.auxiliaryactivitybar.right {
 	--modern-ui-floating-card-left-border-color: var(--modern-ui-floating-card-stroke-color);
 }
 
-.monaco-workbench.floating-panels.modern-ui-compact:not(.noactivitybar) .part.sidebar.right {
+.monaco-workbench.floating-panels.modern-ui-compact:not(.noactivitybar) .part.sidebar.right,
+.monaco-workbench.floating-panels.modern-ui-compact:not(.noauxiliaryactivitybar) .part.auxiliarybar.right {
 	--modern-ui-floating-card-right-border-color: transparent;
 }
 

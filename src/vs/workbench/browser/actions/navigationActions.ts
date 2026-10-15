@@ -312,10 +312,13 @@ abstract class BaseFocusAction extends Action2 {
 					neighbour = next ? Parts.AUXILIARYBAR_PART : Parts.EDITOR_PART;
 					break;
 				case Parts.AUXILIARYBAR_PART:
-					neighbour = next ? Parts.STATUSBAR_PART : Parts.PANEL_PART;
+					neighbour = next ? Parts.AUXILIARY_ACTIVITYBAR_PART : Parts.PANEL_PART;
+					break;
+				case Parts.AUXILIARY_ACTIVITYBAR_PART:
+					neighbour = next ? Parts.STATUSBAR_PART : Parts.AUXILIARYBAR_PART;
 					break;
 				case Parts.STATUSBAR_PART:
-					neighbour = next ? Parts.ACTIVITYBAR_PART : Parts.AUXILIARYBAR_PART;
+					neighbour = next ? Parts.ACTIVITYBAR_PART : Parts.AUXILIARY_ACTIVITYBAR_PART;
 					break;
 				case Parts.ACTIVITYBAR_PART:
 					neighbour = next ? Parts.SIDEBAR_PART : Parts.STATUSBAR_PART;
@@ -341,6 +344,8 @@ abstract class BaseFocusAction extends Action2 {
 			currentlyFocusedPart = Parts.EDITOR_PART;
 		} else if (layoutService.hasFocus(Parts.ACTIVITYBAR_PART)) {
 			currentlyFocusedPart = Parts.ACTIVITYBAR_PART;
+		} else if (layoutService.hasFocus(Parts.AUXILIARY_ACTIVITYBAR_PART)) {
+			currentlyFocusedPart = Parts.AUXILIARY_ACTIVITYBAR_PART;
 		} else if (layoutService.hasFocus(Parts.STATUSBAR_PART)) {
 			currentlyFocusedPart = Parts.STATUSBAR_PART;
 		} else if (layoutService.hasFocus(Parts.SIDEBAR_PART)) {

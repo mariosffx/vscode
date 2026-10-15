@@ -23,6 +23,7 @@ export const enum Parts {
 	BANNER_PART = 'workbench.parts.banner',
 	ACTIVITYBAR_PART = 'workbench.parts.activitybar',
 	SIDEBAR_PART = 'workbench.parts.sidebar',
+	AUXILIARY_ACTIVITYBAR_PART = 'workbench.parts.auxiliaryactivitybar',
 	PANEL_PART = 'workbench.parts.panel',
 	AUXILIARYBAR_PART = 'workbench.parts.auxiliarybar',
 	SESSIONS_PART = 'workbench.parts.sessions',
@@ -46,6 +47,7 @@ export const enum LayoutSettings {
 	ACTIVITY_BAR_LOCATION = 'workbench.activityBar.location',
 	ACTIVITY_BAR_AUTO_HIDE = 'workbench.activityBar.autoHide',
 	ACTIVITY_BAR_COMPACT = 'workbench.activityBar.compact',
+	AUXILIARY_ACTIVITY_BAR_LOCATION = 'workbench.secondarySideBar.activityBarLocation',
 	EDITOR_TABS_MODE = 'workbench.editor.showTabs',
 	EDITOR_ACTIONS_LOCATION = 'workbench.editor.editorActionsLocation',
 	COMMAND_CENTER = 'window.commandCenter',
@@ -115,6 +117,20 @@ export function getFloatingPanelOuterMargin(layoutService: IWorkbenchLayoutServi
 
 export const enum ActivityBarPosition {
 	DEFAULT = 'default',
+	TOP = 'top',
+	BOTTOM = 'bottom',
+	HIDDEN = 'hidden'
+}
+
+/**
+ * Where the Secondary Side Bar shows its activity bar. `DEFAULT` is a vertical rail on the
+ * outer edge of the Secondary Side Bar (the `Parts.AUXILIARY_ACTIVITYBAR_PART`), mirroring the
+ * primary activity bar. `TITLE` renders the items inline in the Secondary Side Bar title, which
+ * is how the Secondary Side Bar behaved before it had a rail of its own.
+ */
+export const enum AuxiliaryActivityBarPosition {
+	DEFAULT = 'default',
+	TITLE = 'title',
 	TOP = 'top',
 	BOTTOM = 'bottom',
 	HIDDEN = 'hidden'
@@ -208,6 +224,9 @@ export function getFloatingOuterEdgeOwners(layoutService: IWorkbenchLayoutServic
 	// bar that spans the full content width) is skipped and the spanning card is detected on
 	// both edges.
 	const sideBarGroup: Parts[] = [Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART];
+	// The secondary side bar has a rail of its own on the opposite edge; like the primary rail
+	// it is the outermost card of its cluster.
+	const auxiliaryBarGroup: Parts[] = [Parts.AUXILIARY_ACTIVITYBAR_PART, Parts.AUXILIARYBAR_PART];
 	const panelGroup: Parts[] = [Parts.PANEL_PART];
 	const fullOrder: Parts[] = sideBarLeft
 		? [
@@ -215,10 +234,10 @@ export function getFloatingOuterEdgeOwners(layoutService: IWorkbenchLayoutServic
 			...(panelInLeftSequence ? panelGroup : []),
 			Parts.EDITOR_PART,
 			...(panelInRightSequence ? panelGroup : []),
-			Parts.AUXILIARYBAR_PART
+			...[...auxiliaryBarGroup].reverse() // secondary activity bar is outermost on the right edge
 		]
 		: [
-			Parts.AUXILIARYBAR_PART,
+			...auxiliaryBarGroup,
 			...(panelInLeftSequence ? panelGroup : []),
 			Parts.EDITOR_PART,
 			...(panelInRightSequence ? panelGroup : []),
@@ -293,15 +312,26 @@ export function getFloatingPaneCompositeHorizontalMargins(layoutService: IWorkbe
 	const meetsActivityBarRail = partId === Parts.SIDEBAR_PART
 		&& layoutService.getSideBarPosition() === Position.LEFT
 		&& layoutService.isVisible(Parts.ACTIVITYBAR_PART);
-	const leading = meetsActivityBarRail ? FLOATING_PANEL_INNER_MARGIN : margin;
+	// The secondary side bar meets its own rail the same way when it sits on the left.
+	const meetsAuxiliaryActivityBarRail = partId === Parts.AUXILIARYBAR_PART
+		&& layoutService.getSideBarPosition() === Position.RIGHT
+		&& layoutService.isVisible(Parts.AUXILIARY_ACTIVITYBAR_PART);
+	const leading = meetsActivityBarRail || meetsAuxiliaryActivityBarRail ? FLOATING_PANEL_INNER_MARGIN : margin;
 
+	const siblingStatus = getFloatingSidebarSiblingToEditorStatus(layoutService);
 	const panelMeetsRightActivityBar = partId === Parts.PANEL_PART
 		&& isHorizontal(layoutService.getPanelPosition())
 		&& layoutService.getSideBarPosition() === Position.RIGHT
 		&& layoutService.isVisible(Parts.ACTIVITYBAR_PART)
 		&& layoutService.isVisible(Parts.SIDEBAR_PART)
-		&& getFloatingSidebarSiblingToEditorStatus(layoutService).sideBar;
-	const trailing = panelMeetsRightActivityBar ? margin : FLOATING_PANEL_INNER_MARGIN;
+		&& siblingStatus.sideBar;
+	const panelMeetsRightAuxiliaryActivityBar = partId === Parts.PANEL_PART
+		&& isHorizontal(layoutService.getPanelPosition())
+		&& layoutService.getSideBarPosition() === Position.LEFT
+		&& layoutService.isVisible(Parts.AUXILIARY_ACTIVITYBAR_PART)
+		&& layoutService.isVisible(Parts.AUXILIARYBAR_PART)
+		&& siblingStatus.auxBar;
+	const trailing = panelMeetsRightActivityBar || panelMeetsRightAuxiliaryActivityBar ? margin : FLOATING_PANEL_INNER_MARGIN;
 
 	return {
 		left: outerGutter.left ? outerMargin : leading,
@@ -437,7 +467,8 @@ function getFloatingHorizontalPanelOuterEdges(layoutService: IWorkbenchLayoutSer
 
 	const sideBarSideReached = !layoutService.isVisible(Parts.ACTIVITYBAR_PART)
 		&& (!layoutService.isVisible(Parts.SIDEBAR_PART) || sideBarSiblingToEditor);
-	const auxSideReached = !layoutService.isVisible(Parts.AUXILIARYBAR_PART) || auxSiblingToEditor;
+	const auxSideReached = !layoutService.isVisible(Parts.AUXILIARY_ACTIVITYBAR_PART)
+		&& (!layoutService.isVisible(Parts.AUXILIARYBAR_PART) || auxSiblingToEditor);
 
 	return sideBarLeft
 		? { left: sideBarSideReached, right: auxSideReached }
@@ -799,6 +830,10 @@ function isTitleBarEmpty(configurationService: IConfigurationService): boolean {
 	// with the activity bar on top, we should always show
 	const activityBarPosition = configurationService.getValue<ActivityBarPosition>(LayoutSettings.ACTIVITY_BAR_LOCATION);
 	if (activityBarPosition === ActivityBarPosition.TOP || activityBarPosition === ActivityBarPosition.BOTTOM) {
+		return false;
+	}
+	const auxiliaryActivityBarPosition = configurationService.getValue<AuxiliaryActivityBarPosition>(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION);
+	if (auxiliaryActivityBarPosition === AuxiliaryActivityBarPosition.TOP || auxiliaryActivityBarPosition === AuxiliaryActivityBarPosition.BOTTOM) {
 		return false;
 	}
 

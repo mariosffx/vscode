@@ -125,6 +125,14 @@ suite('LayoutService - getFloatingOuterEdgeOwners', () => {
 			// and the side bar, so it never reaches an edge.
 			verticalPanelFull: owners(s => { s.panelPosition = Position.LEFT; s.visibleParts = new Set([Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART, Parts.PANEL_PART, Parts.EDITOR_PART, Parts.AUXILIARYBAR_PART]); }),
 
+			// With the secondary activity bar visible it is the outermost card of the secondary
+			// side bar cluster and owns that edge, on whichever side the cluster sits.
+			secondaryRailFull: owners(s => { s.visibleParts = new Set([Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART, Parts.EDITOR_PART, Parts.AUXILIARYBAR_PART, Parts.AUXILIARY_ACTIVITYBAR_PART]); }),
+			secondaryRailFullSideBarRight: owners(s => { s.sideBarPosition = Position.RIGHT; s.visibleParts = new Set([Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART, Parts.EDITOR_PART, Parts.AUXILIARYBAR_PART, Parts.AUXILIARY_ACTIVITYBAR_PART]); }),
+
+			// The secondary rail stays even when its side bar is collapsed, like the primary one.
+			secondaryRailCollapsedAuxBar: owners(s => { s.visibleParts = new Set([Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART, Parts.EDITOR_PART, Parts.AUXILIARY_ACTIVITYBAR_PART]); }),
+
 			// Maximized left vertical panel with the activity bar hidden: the panel spans the
 			// full width and owns both edges.
 			maximizedVerticalPanel: owners(s => { s.panelPosition = Position.LEFT; s.visibleParts = new Set([Parts.PANEL_PART]); }),
@@ -145,6 +153,9 @@ suite('LayoutService - getFloatingOuterEdgeOwners', () => {
 			maximizedAuxNoActivityBarSideBarRight: { left: Parts.AUXILIARYBAR_PART, right: Parts.AUXILIARYBAR_PART },
 			editorOnly: { left: Parts.EDITOR_PART, right: Parts.EDITOR_PART },
 			verticalPanelFull: { left: Parts.ACTIVITYBAR_PART, right: Parts.AUXILIARYBAR_PART },
+			secondaryRailFull: { left: Parts.ACTIVITYBAR_PART, right: Parts.AUXILIARY_ACTIVITYBAR_PART },
+			secondaryRailFullSideBarRight: { left: Parts.AUXILIARY_ACTIVITYBAR_PART, right: Parts.ACTIVITYBAR_PART },
+			secondaryRailCollapsedAuxBar: { left: Parts.ACTIVITYBAR_PART, right: Parts.AUXILIARY_ACTIVITYBAR_PART },
 			maximizedVerticalPanel: { left: Parts.PANEL_PART, right: Parts.PANEL_PART },
 			horizontalPanelVisible: { left: Parts.SIDEBAR_PART, right: Parts.AUXILIARYBAR_PART },
 		});

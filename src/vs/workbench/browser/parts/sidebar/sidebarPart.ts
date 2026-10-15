@@ -68,7 +68,13 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		return Math.max(width, 300);
 	}
 
-	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this));
+	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this, {
+		partId: Parts.ACTIVITYBAR_PART,
+		pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
+		placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
+		viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
+		globalActivities: true
+	}));
 	private readonly visibleViewContainersTracker: VisibleViewContainersTracker;
 	private readonly primarySideBarSashClassDisposable = this._register(new MutableDisposable());
 

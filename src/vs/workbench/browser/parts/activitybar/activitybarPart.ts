@@ -9,7 +9,7 @@ import { localize, localize2 } from '../../../../nls.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { Part } from '../../part.js';
 import { mainWindow } from '../../../../base/browser/window.js';
-import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position, FLOATING_PANEL_INNER_MARGIN, FLOATING_PANEL_MARGIN, getFloatingPanelMargin, getFloatingPanelOuterMargin, isFloatingTopEdgeExposed } from '../../../services/layout/browser/layoutService.js';
+import { ActivityBarPosition, AuxiliaryActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position, FLOATING_PANEL_INNER_MARGIN, FLOATING_PANEL_MARGIN, getFloatingPanelMargin, getFloatingPanelOuterMargin, isFloatingTopEdgeExposed } from '../../../services/layout/browser/layoutService.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { ToggleSidebarPositionAction, ToggleSidebarVisibilityAction } from '../../actions/layoutActions.js';
@@ -41,6 +41,23 @@ import { IWorkbenchEnvironmentService } from '../../../services/environment/comm
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { SwitchCompositeViewAction } from '../compositeBarActions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
+import { ToggleAuxiliaryBarAction } from '../auxiliarybar/auxiliaryBarActions.js';
+
+/**
+ * Configures which rail an {@link ActivitybarPart} instance is. The workbench has two: the
+ * primary activity bar beside the Primary Side Bar, and the secondary activity bar beside
+ * the Secondary Side Bar on the opposite edge. Both share the same rendering; they differ in
+ * the part they are, the storage keys of the pinned view containers and whether they host
+ * the global activities (Accounts, Manage) and the compact menu bar.
+ */
+export interface IActivitybarPartOptions {
+	readonly partId: Parts.ACTIVITYBAR_PART | Parts.AUXILIARY_ACTIVITYBAR_PART;
+	readonly pinnedViewContainersKey: string;
+	readonly placeholderViewContainersKey: string;
+	readonly viewContainersWorkspaceStateKey: string;
+	/** Whether the rail hosts the global activities (Accounts, Manage) and the compact menu bar. */
+	readonly globalActivities: boolean;
+}
 
 export class ActivitybarPart extends Part {
 
@@ -169,8 +186,30 @@ export class ActivitybarPart extends Part {
 	 */
 	private get needsFloatingLeadingGap(): boolean {
 		return !this.layoutService.isModernUICompact()
-			&& this.layoutService.getSideBarPosition() === Position.RIGHT
-			&& !this.layoutService.isVisible(Parts.SIDEBAR_PART);
+			&& !this.isOnLeft
+			&& !this.layoutService.isVisible(this.attachedPartId);
+	}
+
+	/** The part this rail is for. */
+	get partId(): Parts.ACTIVITYBAR_PART | Parts.AUXILIARY_ACTIVITYBAR_PART {
+		return this.railOptions.partId;
+	}
+
+	/**
+	 * The side bar this rail is attached to: the Primary Side Bar for the primary activity bar,
+	 * the Secondary Side Bar for the secondary one.
+	 */
+	get attachedPartId(): Parts.SIDEBAR_PART | Parts.AUXILIARYBAR_PART {
+		return this.partId === Parts.ACTIVITYBAR_PART ? Parts.SIDEBAR_PART : Parts.AUXILIARYBAR_PART;
+	}
+
+	/**
+	 * Whether the rail sits on the left window edge. The primary rail follows the Primary Side Bar
+	 * position, the secondary rail sits on the opposite edge.
+	 */
+	get isOnLeft(): boolean {
+		const sideBarLeft = this.layoutService.getSideBarPosition() === Position.LEFT;
+		return this.partId === Parts.ACTIVITYBAR_PART ? sideBarLeft : !sideBarLeft;
 	}
 
 	private readonly compositeBar = this._register(new MutableDisposable<PaneCompositeBar>());
@@ -181,6 +220,7 @@ export class ActivitybarPart extends Part {
 	constructor(
 		private readonly location: ViewContainerLocation,
 		private readonly paneCompositePart: IPaneCompositePart,
+		private readonly railOptions: IActivitybarPartOptions,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IThemeService themeService: IThemeService,
@@ -188,7 +228,7 @@ export class ActivitybarPart extends Part {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IHostService private readonly hostService: IHostService,
 	) {
-		super(Parts.ACTIVITYBAR_PART, { hasTitle: false }, themeService, storageService, layoutService);
+		super(railOptions.partId, { hasTitle: false }, themeService, storageService, layoutService);
 
 		this._isCompact = this.configurationService.getValue<boolean>(LayoutSettings.ACTIVITY_BAR_COMPACT) ?? false;
 
@@ -223,10 +263,10 @@ export class ActivitybarPart extends Part {
 			updateStyles();
 		}));
 
-		// Showing or hiding the primary side bar decides whether the rail connects to it or
+		// Showing or hiding the attached side bar decides whether the rail connects to it or
 		// stands alone, which can change the gutter it reserves (see `needsFloatingLeadingGap`).
 		this._register(this.layoutService.onDidChangePartVisibility(e => {
-			if (e.partId === Parts.SIDEBAR_PART && this.layoutService.isFloatingPanelsEnabled()) {
+			if (e.partId === this.attachedPartId && this.layoutService.isFloatingPanelsEnabled()) {
 				this._onDidChange.fire(undefined);
 			}
 		}));
@@ -235,8 +275,10 @@ export class ActivitybarPart extends Part {
 	private updateCompactStyle(): void {
 		if (this.element) {
 			this.element.classList.toggle('compact', this._isCompact);
-			// Mirrored on the workbench root for floatingPanels.css
-			this.layoutService.mainContainer.classList.toggle('activitybar-compact', this._isCompact);
+			// Mirrored on the workbench root for floatingPanels.css (the status bar aligns to the primary rail)
+			if (this.partId === Parts.ACTIVITYBAR_PART) {
+				this.layoutService.mainContainer.classList.toggle('activitybar-compact', this._isCompact);
+			}
 			this.element.style.setProperty('--activity-bar-width', `${this.baseWidth}px`);
 			this.element.style.setProperty('--activity-bar-action-height', `${this.actionHeight}px`);
 			this.element.style.setProperty('--activity-bar-action-gap', `${this.actionGap}px`);
@@ -265,14 +307,14 @@ export class ActivitybarPart extends Part {
 
 		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.location, {
 			partContainerClass: 'activitybar',
-			pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
-			placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
-			viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
+			pinnedViewContainersKey: this.railOptions.pinnedViewContainersKey,
+			placeholderViewContainersKey: this.railOptions.placeholderViewContainersKey,
+			viewContainersWorkspaceStateKey: this.railOptions.viewContainersWorkspaceStateKey,
 			orientation: ActionsOrientation.VERTICAL,
 			icon: true,
 			iconSize,
 			activityHoverOptions: {
-				position: () => this.layoutService.getSideBarPosition() === Position.LEFT ? HoverPosition.RIGHT : HoverPosition.LEFT,
+				position: () => this.isOnLeft ? HoverPosition.RIGHT : HoverPosition.LEFT,
 			},
 			preventLoopNavigation: true,
 			recomputeSizes: false,
@@ -289,7 +331,7 @@ export class ActivitybarPart extends Part {
 				activeBackgroundColor: undefined, inactiveBackgroundColor: undefined, activeBorderBottomColor: undefined,
 			}),
 			overflowActionSize: compositeSize,
-		}, Parts.ACTIVITYBAR_PART, this.paneCompositePart, { actionHeight: this.actionHeight, actionGap: this.actionGap });
+		}, this.partId, this.paneCompositePart, this.railOptions.globalActivities ? { actionHeight: this.actionHeight, actionGap: this.actionGap } : undefined);
 	}
 
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
@@ -298,7 +340,7 @@ export class ActivitybarPart extends Part {
 
 		this.updateCompactStyle();
 
-		if (this.layoutService.isVisible(Parts.ACTIVITYBAR_PART)) {
+		if (this.layoutService.isVisible(this.partId)) {
 			this.show();
 		}
 
@@ -417,7 +459,7 @@ export class ActivitybarPart extends Part {
 
 	toJSON(): object {
 		return {
-			type: Parts.ACTIVITYBAR_PART
+			type: this.partId
 		};
 	}
 }
@@ -471,7 +513,7 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 
 		// Register for configuration changes
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(MenuSettings.MenuBarVisibility)) {
+			if (e.affectsConfiguration(MenuSettings.MenuBarVisibility) && this.supportsMenubar) {
 				if (getMenuBarVisibility(this.configurationService) === 'compact') {
 					this.installMenubar();
 				} else {
@@ -481,10 +523,17 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		}));
 	}
 
+	/**
+	 * Only the primary activity bar hosts the compact menu bar; the secondary rail never does.
+	 */
+	private get supportsMenubar(): boolean {
+		return this.part === Parts.ACTIVITYBAR_PART;
+	}
+
 	private fillContextMenuActions(actions: IAction[], e?: MouseEvent | GestureEvent) {
 		// Menu
 		const menuBarVisibility = getMenuBarVisibility(this.configurationService);
-		if (menuBarVisibility === 'compact' || menuBarVisibility === 'hidden' || menuBarVisibility === 'toggle') {
+		if (this.supportsMenubar && (menuBarVisibility === 'compact' || menuBarVisibility === 'hidden' || menuBarVisibility === 'toggle')) {
 			actions.unshift(...[toAction({ id: 'toggleMenuVisibility', label: localize('menu', "Menu"), checked: menuBarVisibility === 'compact', run: () => this.configurationService.updateValue(MenuSettings.MenuBarVisibility, menuBarVisibility === 'compact' ? 'toggle' : 'compact') }), new Separator()]);
 		}
 
@@ -570,7 +619,7 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		this.element = parent;
 
 		// Install menubar if compact
-		if (getMenuBarVisibility(this.configurationService) === 'compact') {
+		if (this.supportsMenubar && getMenuBarVisibility(this.configurationService) === 'compact') {
 			this.installMenubar();
 		}
 
@@ -609,6 +658,10 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 	}
 
 	getActivityBarContextMenuActions(): IAction[] {
+		if (this.part === Parts.AUXILIARY_ACTIVITYBAR_PART) {
+			return this.getAuxiliaryActivityBarContextMenuActions();
+		}
+
 		const activityBarPositionMenu = this.menuService.getMenuActions(MenuId.ActivityBarPositionMenu, this.contextKeyService, { shouldForwardArgs: true, renderShortTitle: true });
 		const positionActions = getContextMenuActions(activityBarPositionMenu).secondary;
 		const actions: IAction[] = [
@@ -631,6 +684,39 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		if (this.part === Parts.SIDEBAR_PART) {
 			actions.push(toAction({ id: ToggleSidebarVisibilityAction.ID, label: ToggleSidebarVisibilityAction.LABEL, run: () => this.instantiationService.invokeFunction(accessor => new ToggleSidebarVisibilityAction().run(accessor)) }));
 		}
+
+		return actions;
+	}
+
+	private getAuxiliaryActivityBarContextMenuActions(): IAction[] {
+		const positionMenu = this.menuService.getMenuActions(MenuId.AuxiliaryActivityBarPositionMenu, this.contextKeyService, { shouldForwardArgs: true, renderShortTitle: true });
+		const positionActions = getContextMenuActions(positionMenu).secondary;
+		const actions: IAction[] = [
+			new SubmenuAction('workbench.action.auxiliaryActivityBar.position', localize('secondary activity bar position', "Secondary Activity Bar Position"), positionActions),
+		];
+
+		// Size is shared with the primary rail and only applies in the default (rail) position
+		const position = this.configurationService.getValue<string>(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION);
+		if (position === AuxiliaryActivityBarPosition.DEFAULT) {
+			const isCompact = this.configurationService.getValue<boolean>(LayoutSettings.ACTIVITY_BAR_COMPACT) ?? false;
+			const sizeActions = [
+				toAction({ id: 'workbench.action.activityBar.size.default', label: localize('activityBarSizeDefault', "Default"), checked: !isCompact, run: () => this.configurationService.updateValue(LayoutSettings.ACTIVITY_BAR_COMPACT, false) }),
+				toAction({ id: 'workbench.action.activityBar.size.compact', label: localize('activityBarSizeCompact', "Compact"), checked: isCompact, run: () => this.configurationService.updateValue(LayoutSettings.ACTIVITY_BAR_COMPACT, true) }),
+			];
+			actions.push(new SubmenuAction('workbench.action.activityBar.size', localize('activity bar size', "Activity Bar Size"), sizeActions));
+		}
+
+		const secondarySideBarOnRight = this.layoutService.getSideBarPosition() === Position.LEFT;
+		actions.push(toAction({
+			id: ToggleSidebarPositionAction.ID,
+			label: secondarySideBarOnRight ? localize('move second side bar left', "Move Secondary Side Bar Left") : localize('move second side bar right', "Move Secondary Side Bar Right"),
+			run: () => this.instantiationService.invokeFunction(accessor => new ToggleSidebarPositionAction().run(accessor))
+		}));
+		actions.push(toAction({
+			id: ToggleAuxiliaryBarAction.ID,
+			label: this.layoutService.isVisible(Parts.AUXILIARYBAR_PART) ? localize('hide second side bar', "Hide Secondary Side Bar") : localize('show second side bar', "Show Secondary Side Bar"),
+			run: () => this.instantiationService.invokeFunction(accessor => new ToggleAuxiliaryBarAction().run(accessor))
+		}));
 
 		return actions;
 	}
@@ -752,13 +838,84 @@ MenuRegistry.appendMenuItem(MenuId.MenubarAppearanceMenu, {
 MenuRegistry.appendMenuItem(MenuId.ViewContainerTitleContext, {
 	submenu: MenuId.ActivityBarPositionMenu,
 	title: localize('positionActivituBar', "Activity Bar Position"),
-	when: ContextKeyExpr.or(
-		ContextKeyExpr.equals('viewContainerLocation', ViewContainerLocationToString(ViewContainerLocation.Sidebar)),
-		ContextKeyExpr.equals('viewContainerLocation', ViewContainerLocationToString(ViewContainerLocation.AuxiliaryBar))
-	),
+	when: ContextKeyExpr.equals('viewContainerLocation', ViewContainerLocationToString(ViewContainerLocation.Sidebar)),
 	group: '3_workbench_layout_move',
 	order: 1
 });
+
+//#region Secondary Activity Bar Position
+
+class SetAuxiliaryActivityBarPositionAction extends Action2 {
+
+	constructor(private readonly position: AuxiliaryActivityBarPosition, title: string, mnemonicTitle: string, shortTitle: string, order: number) {
+		super({
+			id: `workbench.action.secondaryActivityBarLocation.${position}`,
+			title: { value: title, original: title, mnemonicTitle },
+			shortTitle,
+			category: Categories.View,
+			toggled: ContextKeyExpr.equals(`config.${LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION}`, position),
+			menu: [{
+				id: MenuId.AuxiliaryActivityBarPositionMenu,
+				order
+			}, {
+				id: MenuId.CommandPalette,
+				when: ContextKeyExpr.and(ContextKeyExpr.notEquals(`config.${LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION}`, position), IsSessionsWindowContext.negate()),
+			}]
+		});
+	}
+
+	run(accessor: ServicesAccessor): Promise<void> {
+		return accessor.get(IConfigurationService).updateValue(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION, this.position);
+	}
+}
+
+registerAction2(class extends SetAuxiliaryActivityBarPositionAction {
+	constructor() {
+		super(AuxiliaryActivityBarPosition.DEFAULT, localize('positionSecondaryActivityBarDefault', "Move Secondary Activity Bar to Side"), localize({ key: 'miDefaultSecondaryActivityBar', comment: ['&& denotes a mnemonic'] }, "&&Default"), localize('default', "Default"), 1);
+	}
+});
+
+registerAction2(class extends SetAuxiliaryActivityBarPositionAction {
+	constructor() {
+		super(AuxiliaryActivityBarPosition.TITLE, localize('positionSecondaryActivityBarTitle', "Move Secondary Activity Bar to Title"), localize({ key: 'miTitleSecondaryActivityBar', comment: ['&& denotes a mnemonic'] }, "T&&itle"), localize('title', "Title"), 2);
+	}
+});
+
+registerAction2(class extends SetAuxiliaryActivityBarPositionAction {
+	constructor() {
+		super(AuxiliaryActivityBarPosition.TOP, localize('positionSecondaryActivityBarTop', "Move Secondary Activity Bar to Top"), localize({ key: 'miTopSecondaryActivityBar', comment: ['&& denotes a mnemonic'] }, "&&Top"), localize('top', "Top"), 3);
+	}
+});
+
+registerAction2(class extends SetAuxiliaryActivityBarPositionAction {
+	constructor() {
+		super(AuxiliaryActivityBarPosition.BOTTOM, localize('positionSecondaryActivityBarBottom', "Move Secondary Activity Bar to Bottom"), localize({ key: 'miBottomSecondaryActivityBar', comment: ['&& denotes a mnemonic'] }, "&&Bottom"), localize('bottom', "Bottom"), 4);
+	}
+});
+
+registerAction2(class extends SetAuxiliaryActivityBarPositionAction {
+	constructor() {
+		super(AuxiliaryActivityBarPosition.HIDDEN, localize('hideSecondaryActivityBar', "Hide Secondary Activity Bar"), localize({ key: 'miHideSecondaryActivityBar', comment: ['&& denotes a mnemonic'] }, "&&Hidden"), localize('hide', "Hidden"), 5);
+	}
+});
+
+MenuRegistry.appendMenuItem(MenuId.MenubarAppearanceMenu, {
+	submenu: MenuId.AuxiliaryActivityBarPositionMenu,
+	title: localize('positionSecondaryActivityBar', "Secondary Activity Bar Position"),
+	group: '3_workbench_layout_move',
+	order: 3,
+	when: IsSessionsWindowContext.negate()
+});
+
+MenuRegistry.appendMenuItem(MenuId.ViewContainerTitleContext, {
+	submenu: MenuId.AuxiliaryActivityBarPositionMenu,
+	title: localize('positionSecondaryActivityBar', "Secondary Activity Bar Position"),
+	when: ContextKeyExpr.equals('viewContainerLocation', ViewContainerLocationToString(ViewContainerLocation.AuxiliaryBar)),
+	group: '3_workbench_layout_move',
+	order: 1
+});
+
+//#endregion
 
 registerAction2(class extends SwitchCompositeViewAction {
 	constructor() {
@@ -796,6 +953,23 @@ registerAction2(
 		async run(accessor: ServicesAccessor): Promise<void> {
 			const layoutService = accessor.get(IWorkbenchLayoutService);
 			layoutService.focusPart(Parts.ACTIVITYBAR_PART);
+		}
+	});
+
+registerAction2(
+	class FocusAuxiliaryActivityBarAction extends Action2 {
+		constructor() {
+			super({
+				id: 'workbench.action.focusSecondaryActivityBar',
+				title: localize2('focusSecondaryActivityBar', 'Focus Secondary Activity Bar'),
+				category: Categories.View,
+				f1: true
+			});
+		}
+
+		async run(accessor: ServicesAccessor): Promise<void> {
+			const layoutService = accessor.get(IWorkbenchLayoutService);
+			layoutService.focusPart(Parts.AUXILIARY_ACTIVITYBAR_PART);
 		}
 	});
 

@@ -62,6 +62,7 @@ const centerLayoutIcon = registerIcon('centerLayoutIcon', Codicon.layoutCentered
 const zenModeIcon = registerIcon('zenMode', Codicon.target, localize('zenModeIcon', "Represents zen mode"));
 
 export const ToggleActivityBarVisibilityActionId = 'workbench.action.toggleActivityBarVisibility';
+export const ToggleSecondaryActivityBarVisibilityActionId = 'workbench.action.toggleSecondaryActivityBarVisibility';
 
 // --- Toggle Centered Layout
 
@@ -1367,6 +1368,7 @@ ToggleVisibilityActions.push(...[
 	CreateToggleLayoutItem(ToggleActivityBarVisibilityActionId, ContextKeyExpr.notEquals('config.workbench.activityBar.location', 'hidden'), localize('activityBar', "Activity Bar"), { whenA: ContextKeyExpr.equals('config.workbench.sideBar.location', 'left'), iconA: activityBarLeftIcon, iconB: activityBarRightIcon }),
 	CreateToggleLayoutItem(ToggleSidebarVisibilityAction.ID, SideBarVisibleContext, localize('sideBar', "Primary Side Bar"), { whenA: ContextKeyExpr.equals('config.workbench.sideBar.location', 'left'), iconA: panelLeftIcon, iconB: panelRightIcon }),
 	CreateToggleLayoutItem(ToggleAuxiliaryBarAction.ID, AuxiliaryBarVisibleContext, localize('secondarySideBar', "Secondary Side Bar"), { whenA: ContextKeyExpr.equals('config.workbench.sideBar.location', 'left'), iconA: panelRightIcon, iconB: panelLeftIcon }),
+	CreateToggleLayoutItem(ToggleSecondaryActivityBarVisibilityActionId, ContextKeyExpr.notEquals(`config.${LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION}`, 'hidden'), localize('secondaryActivityBar', "Secondary Activity Bar"), { whenA: ContextKeyExpr.equals('config.workbench.sideBar.location', 'left'), iconA: activityBarRightIcon, iconB: activityBarLeftIcon }),
 	CreateToggleLayoutItem(TogglePanelAction.ID, PanelVisibleContext, localize('panel', "Panel"), panelIcon),
 	CreateToggleLayoutItem(ToggleStatusbarVisibilityAction.ID, ContextKeyExpr.equals('config.workbench.statusBar.visible', true), localize('statusBar', "Status Bar"), statusBarIcon),
 ]);

@@ -96,7 +96,7 @@ suite('ActivitybarPart', () => {
 		disposables.clear();
 	});
 
-	function createActivitybarPart(compact: boolean, floatingPanelsEnabled = false, sideBarPosition = Position.LEFT, colors: { [id: string]: string | undefined } = {}, modernUICompact = false, instantiationService?: IInstantiationService): { part: ActivitybarPart; configService: TestConfigurationService; layoutService: TestFloatingPanelsLayoutService; hostService: TestHostService } {
+	function createActivitybarPart(compact: boolean, floatingPanelsEnabled = false, sideBarPosition = Position.LEFT, colors: { [id: string]: string | undefined } = {}, modernUICompact = false, instantiationService?: IInstantiationService, partId: Parts.ACTIVITYBAR_PART | Parts.AUXILIARY_ACTIVITYBAR_PART = Parts.ACTIVITYBAR_PART): { part: ActivitybarPart; configService: TestConfigurationService; layoutService: TestFloatingPanelsLayoutService; hostService: TestHostService } {
 		const configService = new TestConfigurationService({
 			[LayoutSettings.ACTIVITY_BAR_COMPACT]: compact,
 			[LayoutSettings.MODERN_UI]: floatingPanelsEnabled,
@@ -118,9 +118,17 @@ suite('ActivitybarPart', () => {
 		// which we skip in unit tests focused on dimensions / style behaviour.
 		const stubInstantiationService = instantiationService ?? { createInstance: () => { throw new Error('not expected'); } } as unknown as IInstantiationService;
 
+		const isPrimary = partId === Parts.ACTIVITYBAR_PART;
 		const part = disposables.add(new ActivitybarPart(
-			ViewContainerLocation.Sidebar,
+			isPrimary ? ViewContainerLocation.Sidebar : ViewContainerLocation.AuxiliaryBar,
 			new StubPaneCompositePart(),
+			{
+				partId,
+				pinnedViewContainersKey: isPrimary ? ActivitybarPart.pinnedViewContainersKey : 'test.auxiliary.pinned',
+				placeholderViewContainersKey: isPrimary ? ActivitybarPart.placeholderViewContainersKey : 'test.auxiliary.placeholder',
+				viewContainersWorkspaceStateKey: isPrimary ? ActivitybarPart.viewContainersWorkspaceStateKey : 'test.auxiliary.workspaceState',
+				globalActivities: isPrimary
+			},
 			stubInstantiationService,
 			layoutService,
 			themeService,
@@ -495,6 +503,48 @@ suite('ActivitybarPart', () => {
 	test('toJSON returns correct part type', () => {
 		const { part } = createActivitybarPart(false);
 		assert.deepStrictEqual(part.toJSON(), { type: Parts.ACTIVITYBAR_PART });
+	});
+
+	// --- secondary activity bar --------------------------------------------
+
+	test('secondary activity bar mirrors the primary rail on the opposite edge', () => {
+		const { part, layoutService } = createActivitybarPart(false, false, Position.LEFT, {}, false, undefined, Parts.AUXILIARY_ACTIVITYBAR_PART);
+		const onLeftWhenSideBarLeft = part.isOnLeft;
+		layoutService.sideBarPosition = Position.RIGHT;
+
+		assert.deepStrictEqual({
+			json: part.toJSON(),
+			attachedPart: part.attachedPartId,
+			onLeftWhenSideBarLeft,
+			onLeftWhenSideBarRight: part.isOnLeft,
+			width: part.minimumWidth,
+		}, {
+			json: { type: Parts.AUXILIARY_ACTIVITYBAR_PART },
+			attachedPart: Parts.AUXILIARYBAR_PART,
+			onLeftWhenSideBarLeft: false,
+			onLeftWhenSideBarRight: true,
+			width: ActivitybarPart.ACTIVITYBAR_WIDTH,
+		});
+	});
+
+	test('secondary activity bar reserves the standalone leading gap only when its own side bar is collapsed', () => {
+		const base = ActivitybarPart.FLOATING_ACTIVITYBAR_WIDTH + ActivitybarPart.FLOATING_MARGIN + ActivitybarPart.FLOATING_LANE;
+
+		const widthOf = (auxiliaryBarVisible: boolean, sideBarVisible: boolean) => {
+			const { part, layoutService } = createActivitybarPart(false, true, Position.LEFT, {}, false, undefined, Parts.AUXILIARY_ACTIVITYBAR_PART);
+			layoutService.isVisible = (partId: Parts) => (partId === Parts.AUXILIARYBAR_PART && auxiliaryBarVisible) || (partId === Parts.SIDEBAR_PART && sideBarVisible);
+			return part.minimumWidth;
+		};
+
+		assert.deepStrictEqual({
+			attached: widthOf(true, true),
+			collapsed: widthOf(false, true),
+			primaryCollapsedOnly: widthOf(true, false),
+		}, {
+			attached: base,
+			collapsed: base + ActivitybarPart.FLOATING_MARGIN,
+			primaryCollapsedOnly: base,
+		});
 	});
 
 	// --- layout: floating panels gutter reservation -------------------------

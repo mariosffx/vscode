@@ -150,7 +150,7 @@ class VoiceChatSessionControllerFactory {
 			if (layoutService.hasFocus(Parts.EDITOR_PART)) {
 				context = chatWidget.location === ChatAgentLocation.Chat ? 'editor' : 'inline';
 			} else if (
-				[Parts.SIDEBAR_PART, Parts.PANEL_PART, Parts.AUXILIARYBAR_PART, Parts.TITLEBAR_PART, Parts.STATUSBAR_PART, Parts.BANNER_PART, Parts.ACTIVITYBAR_PART].some(part => layoutService.hasFocus(part))
+				[Parts.SIDEBAR_PART, Parts.PANEL_PART, Parts.AUXILIARYBAR_PART, Parts.TITLEBAR_PART, Parts.STATUSBAR_PART, Parts.BANNER_PART, Parts.ACTIVITYBAR_PART, Parts.AUXILIARY_ACTIVITYBAR_PART].some(part => layoutService.hasFocus(part))
 			) {
 				context = 'view';
 			} else {

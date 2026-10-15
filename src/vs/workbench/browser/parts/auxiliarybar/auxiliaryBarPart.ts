@@ -4,40 +4,41 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/auxiliaryBarPart.css';
-import { localize } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import { IStorageService } from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { contrastBorder } from '../../../../platform/theme/common/colorRegistry.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ActiveAuxiliaryContext, AuxiliaryBarFocusContext } from '../../../common/contextkeys.js';
 import { ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_TOP_ACTIVE_BORDER, ACTIVITY_BAR_TOP_DRAG_AND_DROP_BORDER, ACTIVITY_BAR_TOP_FOREGROUND, ACTIVITY_BAR_TOP_INACTIVE_FOREGROUND, PANEL_ACTIVE_TITLE_BORDER, PANEL_ACTIVE_TITLE_FOREGROUND, PANEL_DRAG_AND_DROP_BORDER, PANEL_INACTIVE_TITLE_FOREGROUND, SIDE_BAR_BACKGROUND, SIDE_BAR_BORDER, SIDE_BAR_TITLE_BORDER, SIDE_BAR_FOREGROUND } from '../../../common/theme.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position } from '../../../services/layout/browser/layoutService.js';
+import { AuxiliaryActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { IAction, Separator, SubmenuAction, toAction } from '../../../../base/common/actions.js';
 import { ToggleAuxiliaryBarAction } from './auxiliaryBarActions.js';
 import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { LayoutPriority } from '../../../../base/browser/ui/splitview/splitview.js';
-import { ToggleSidebarPositionAction } from '../../actions/layoutActions.js';
+import { ToggleSecondaryActivityBarVisibilityActionId, ToggleSidebarPositionAction } from '../../actions/layoutActions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { AbstractPaneCompositePart, CompositeBarPosition } from '../paneCompositePart.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
-import { IMenuService, MenuId, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
+import { Action2, IMenuService, MenuId, registerAction2, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { getContextMenuActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { VisibleViewContainersTracker } from '../visibleViewContainersTracker.js';
 import { Extensions } from '../../panecomposite.js';
 import { IToolBarResponsiveBehaviorOptions } from '../../../../base/browser/ui/toolbar/toolbar.js';
+import { ActivitybarPart } from '../activitybar/activitybarPart.js';
 
 interface IAuxiliaryBarPartConfiguration {
-	position: ActivityBarPosition;
+	position: AuxiliaryActivityBarPosition;
 
 	canShowLabels: boolean;
 	showLabels: boolean;
@@ -81,6 +82,19 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 
 	private configuration: IAuxiliaryBarPartConfiguration;
 	private readonly visibleViewContainersTracker: VisibleViewContainersTracker;
+
+	/**
+	 * The vertical secondary activity bar on the outer edge of this part. It shares the pinned
+	 * view container state with the composite bar this part renders in its title, header or
+	 * footer, so switching positions keeps the same items.
+	 */
+	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this, {
+		partId: Parts.AUXILIARY_ACTIVITYBAR_PART,
+		pinnedViewContainersKey: AuxiliaryBarPart.pinnedViewsKey,
+		placeholderViewContainersKey: AuxiliaryBarPart.placeholdeViewContainersKey,
+		viewContainersWorkspaceStateKey: AuxiliaryBarPart.viewContainersWorkspaceStateKey,
+		globalActivities: false
+	}));
 
 	constructor(
 		@INotificationService notificationService: INotificationService,
@@ -135,9 +149,10 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		this._register(this.visibleViewContainersTracker.onDidChange((e) => this.onDidChangeAutoHideViewContainers(e)));
 
 		this.configuration = this.resolveConfiguration();
+		this.rememberActivityBarVisiblePosition();
 
 		this._register(configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(LayoutSettings.ACTIVITY_BAR_LOCATION)) {
+			if (e.affectsConfiguration(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION)) {
 				this.configuration = this.resolveConfiguration();
 				this.onDidChangeActivityBarLocation();
 			} else if (e.affectsConfiguration('workbench.secondarySideBar.showLabels')) {
@@ -147,12 +162,14 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 				this.onDidChangeActivityBarLocation();
 			}
 		}));
+
+		this.registerActions();
 	}
 
 	private onDidChangeAutoHideViewContainers(e: { before: number; after: number }): void {
 		// Only update if auto-hide is enabled and composite bar would show
 		const autoHide = this.configurationService.getValue<boolean>(LayoutSettings.ACTIVITY_BAR_AUTO_HIDE);
-		if (autoHide && (this.configuration.position === ActivityBarPosition.TOP || this.configuration.position === ActivityBarPosition.BOTTOM)) {
+		if (autoHide && (this.configuration.position === AuxiliaryActivityBarPosition.TOP || this.configuration.position === AuxiliaryActivityBarPosition.BOTTOM)) {
 			const visibleBefore = e.before > 1;
 			const visibleAfter = e.after > 1;
 			if (visibleBefore !== visibleAfter) {
@@ -173,21 +190,97 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	}
 
 	private resolveConfiguration(): IAuxiliaryBarPartConfiguration {
-		const position = this.configurationService.getValue<ActivityBarPosition>(LayoutSettings.ACTIVITY_BAR_LOCATION);
+		const position = this.configurationService.getValue<AuxiliaryActivityBarPosition>(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION) ?? AuxiliaryActivityBarPosition.DEFAULT;
 
-		const canShowLabels = position !== ActivityBarPosition.TOP && position !== ActivityBarPosition.BOTTOM; // use same style as activity bar in this case
+		const canShowLabels = position === AuxiliaryActivityBarPosition.TITLE; // labels only fit in the title, the rail and the header/footer use icons
 		const showLabels = canShowLabels && this.configurationService.getValue('workbench.secondarySideBar.showLabels') !== false;
 
 		return { position, canShowLabels, showLabels };
 	}
 
 	private onDidChangeActivityBarLocation(): void {
+		this.activityBarPart.hide();
+
 		this.updateCompositeBar();
 
 		const id = this.getActiveComposite()?.getId();
 		if (id) {
 			this.onTitleAreaUpdate(id);
 		}
+
+		if (this.shouldShowActivityBar()) {
+			this.activityBarPart.show();
+		}
+
+		this.rememberActivityBarVisiblePosition();
+	}
+
+	private shouldShowActivityBar(): boolean {
+		return this.configuration.position === AuxiliaryActivityBarPosition.DEFAULT;
+	}
+
+	private rememberActivityBarVisiblePosition(): void {
+		if (this.configuration.position !== AuxiliaryActivityBarPosition.HIDDEN) {
+			this.storageService.store(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION, this.configuration.position, StorageScope.PROFILE, StorageTarget.USER);
+		}
+	}
+
+	private getRememberedActivityBarVisiblePosition(): AuxiliaryActivityBarPosition {
+		switch (this.storageService.get(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION, StorageScope.PROFILE)) {
+			case AuxiliaryActivityBarPosition.TITLE: return AuxiliaryActivityBarPosition.TITLE;
+			case AuxiliaryActivityBarPosition.TOP: return AuxiliaryActivityBarPosition.TOP;
+			case AuxiliaryActivityBarPosition.BOTTOM: return AuxiliaryActivityBarPosition.BOTTOM;
+			default: return AuxiliaryActivityBarPosition.DEFAULT;
+		}
+	}
+
+	override getPinnedPaneCompositeIds(): string[] {
+		return this.shouldShowCompositeBar() ? super.getPinnedPaneCompositeIds() : this.activityBarPart.getPinnedPaneCompositeIds();
+	}
+
+	override getVisiblePaneCompositeIds(): string[] {
+		return this.shouldShowCompositeBar() ? super.getVisiblePaneCompositeIds() : this.activityBarPart.getVisiblePaneCompositeIds();
+	}
+
+	override getPaneCompositeIds(): string[] {
+		return this.shouldShowCompositeBar() ? super.getPaneCompositeIds() : this.activityBarPart.getPaneCompositeIds();
+	}
+
+	/**
+	 * Focuses the secondary activity bar, showing it first if it is hidden.
+	 */
+	async focusActivityBar(): Promise<void> {
+		if (this.configuration.position === AuxiliaryActivityBarPosition.HIDDEN) {
+			await this.configurationService.updateValue(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION, this.getRememberedActivityBarVisiblePosition());
+			this.configuration = this.resolveConfiguration();
+			this.onDidChangeActivityBarLocation();
+		}
+
+		if (this.shouldShowCompositeBar()) {
+			this.focusCompositeBar();
+		} else {
+			if (!this.layoutService.isVisible(Parts.AUXILIARY_ACTIVITYBAR_PART)) {
+				this.layoutService.setPartHidden(false, Parts.AUXILIARY_ACTIVITYBAR_PART);
+			}
+
+			this.activityBarPart.show(true);
+		}
+	}
+
+	private registerActions(): void {
+		const that = this;
+		this._register(registerAction2(class extends Action2 {
+			constructor() {
+				super({
+					id: ToggleSecondaryActivityBarVisibilityActionId,
+					title: localize2('toggleSecondaryActivityBar', "Toggle Secondary Activity Bar Visibility"),
+				});
+			}
+			run(): Promise<void> {
+				const value = that.configuration.position === AuxiliaryActivityBarPosition.HIDDEN ? that.getRememberedActivityBarVisiblePosition() : AuxiliaryActivityBarPosition.HIDDEN;
+				return that.configurationService.updateValue(LayoutSettings.AUXILIARY_ACTIVITY_BAR_LOCATION, value);
+			}
+		}));
 	}
 
 	override updateStyles(): void {
@@ -253,7 +346,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 			}
 		}
 
-		const activityBarPositionMenu = this.menuService.getMenuActions(MenuId.ActivityBarPositionMenu, this.contextKeyService, { shouldForwardArgs: true, renderShortTitle: true });
+		const activityBarPositionMenu = this.menuService.getMenuActions(MenuId.AuxiliaryActivityBarPositionMenu, this.contextKeyService, { shouldForwardArgs: true, renderShortTitle: true });
 		const positionActions = getContextMenuActions(activityBarPositionMenu).secondary;
 
 		const toggleShowLabelsAction = toAction({
@@ -265,7 +358,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 
 		actions.push(...[
 			new Separator(),
-			new SubmenuAction('workbench.action.panel.position', localize('activity bar position', "Activity Bar Position"), positionActions),
+			new SubmenuAction('workbench.action.auxiliaryActivityBar.position', localize('secondary activity bar position', "Secondary Activity Bar Position"), positionActions),
 			toAction({ id: ToggleSidebarPositionAction.ID, label: currentPositionRight ? localize('move second side bar left', "Move Secondary Side Bar Left") : localize('move second side bar right', "Move Secondary Side Bar Right"), run: () => this.commandService.executeCommand(ToggleSidebarPositionAction.ID) }),
 			toggleShowLabelsAction,
 			toAction({ id: ToggleAuxiliaryBarAction.ID, label: localize('hide second side bar', "Hide Secondary Side Bar"), run: () => this.commandService.executeCommand(ToggleAuxiliaryBarAction.ID) })
@@ -273,13 +366,18 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	}
 
 	protected shouldShowCompositeBar(): boolean {
-		if (this.configuration.position === ActivityBarPosition.HIDDEN) {
+		if (this.configuration.position === AuxiliaryActivityBarPosition.HIDDEN) {
+			return false;
+		}
+
+		// In the default position the items live in the vertical secondary activity bar
+		if (this.configuration.position === AuxiliaryActivityBarPosition.DEFAULT) {
 			return false;
 		}
 
 		// Check if auto-hide is enabled and there's only one visible view container
 		// while the activity bar is configured to be top or bottom.
-		if (this.configuration.position === ActivityBarPosition.TOP || this.configuration.position === ActivityBarPosition.BOTTOM) {
+		if (this.configuration.position === AuxiliaryActivityBarPosition.TOP || this.configuration.position === AuxiliaryActivityBarPosition.BOTTOM) {
 			const autoHide = this.configurationService.getValue<boolean>(LayoutSettings.ACTIVITY_BAR_AUTO_HIDE);
 			if (autoHide) {
 				// Use visible composite count from the composite bar if available (considers pinned state),
@@ -297,10 +395,11 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 
 	protected getCompositeBarPosition(): CompositeBarPosition {
 		switch (this.configuration.position) {
-			case ActivityBarPosition.TOP: return CompositeBarPosition.TOP;
-			case ActivityBarPosition.BOTTOM: return CompositeBarPosition.BOTTOM;
-			case ActivityBarPosition.HIDDEN: return CompositeBarPosition.TITLE;
-			case ActivityBarPosition.DEFAULT: return CompositeBarPosition.TITLE;
+			case AuxiliaryActivityBarPosition.TOP: return CompositeBarPosition.TOP;
+			case AuxiliaryActivityBarPosition.BOTTOM: return CompositeBarPosition.BOTTOM;
+			case AuxiliaryActivityBarPosition.TITLE:
+			case AuxiliaryActivityBarPosition.HIDDEN:
+			case AuxiliaryActivityBarPosition.DEFAULT: // noop
 			default: return CompositeBarPosition.TITLE;
 		}
 	}

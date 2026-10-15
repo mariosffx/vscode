@@ -8,8 +8,9 @@
 	height: 100%;
 }
 
-/* Activity Bar - shadow when sidebar is hidden or on the right */
-.monaco-workbench.nosidebar .part.activitybar {
+/* Activity Bar - shadow when its side bar is hidden or on the right */
+.monaco-workbench.nosidebar .part.activitybar:not(.auxiliaryactivitybar),
+.monaco-workbench.noauxiliarybar .part.auxiliaryactivitybar {
 	box-shadow: var(--vscode-shadow-md);
 }
 

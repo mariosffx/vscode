@@ -724,4 +724,30 @@ suite('ViewDescriptorService', () => {
 		assert.deepStrictEqual(generatedViewContainerModel.allViewDescriptors.map(v => v.id), []);
 	});
 
+	test('view container locations are shared by all profiles', function () {
+		const storageService = instantiationService.get(IStorageService);
+		// eslint-disable-next-line local/code-no-any-casts
+		const viewContainer = ViewContainersRegistry.registerViewContainer({ id: `${viewContainerIdPrefix}-${generateUuid()}`, title: nls.localize2('test', 'test'), ctorDescriptor: new SyncDescriptor(<any>{}) }, ViewContainerLocation.Sidebar);
+
+		// stored per profile before locations were shared
+		storageService.store('views.customizations', JSON.stringify({ viewContainerLocations: { [viewContainer.id]: ViewContainerLocation.AuxiliaryBar }, viewLocations: {} }), StorageScope.PROFILE, StorageTarget.USER);
+		const testObject = aViewDescriptorService();
+		const fromProfile = testObject.getViewContainerLocation(viewContainer);
+
+		testObject.moveViewContainerToLocation(viewContainer, ViewContainerLocation.Panel);
+
+		// switching to a profile with its own value
+		storageService.store('views.customizations', JSON.stringify({ viewContainerLocations: {}, viewLocations: {} }), StorageScope.PROFILE, StorageTarget.USER);
+
+		assert.deepStrictEqual({
+			fromProfile,
+			afterProfileChange: testObject.getViewContainerLocation(viewContainer),
+			shared: JSON.parse(storageService.get('views.customizations', StorageScope.APPLICATION)!).viewContainerLocations[viewContainer.id],
+		}, {
+			fromProfile: ViewContainerLocation.AuxiliaryBar,
+			afterProfileChange: ViewContainerLocation.Panel,
+			shared: ViewContainerLocation.Panel,
+		});
+	});
+
 });

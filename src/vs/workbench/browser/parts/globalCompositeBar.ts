@@ -66,6 +66,9 @@ export class GlobalCompositeBar extends Disposable {
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
+	private showAccounts = true;
+	private showManage = true;
+
 	constructor(
 		private readonly contextMenuActionsProvider: () => IAction[],
 		private readonly colors: (theme: IColorTheme) => ICompositeBarColors,
@@ -142,19 +145,47 @@ export class GlobalCompositeBar extends Disposable {
 		return count * actionHeight + Math.max(0, count - 1) * actionGap;
 	}
 
+	/**
+	 * Chooses which global activities this bar shows, for a workbench that splits them
+	 * between two bars. Accounts still follow the user's visibility preference.
+	 */
+	setVisibleActivities(accounts: boolean, manage: boolean): void {
+		this.showAccounts = accounts;
+		this.showManage = manage;
+		this.updateActions();
+	}
+
 	getContextMenuActions(): IAction[] {
+		if (!this.showAccounts) {
+			return [];
+		}
 		return [toAction({ id: 'toggleAccountsVisibility', label: localize('accounts', "Accounts"), checked: this.accountsVisibilityPreference, run: () => this.accountsVisibilityPreference = !this.accountsVisibilityPreference })];
 	}
 
 	private toggleAccountsActivity() {
-		const accountsVisible = this.globalActivityActionBar.length() === 2;
-		if (accountsVisible === this.accountsVisibilityPreference) {
+		this.updateActions();
+	}
+
+	private updateActions(): void {
+		const accounts = this.showAccounts && this.accountsVisibilityPreference;
+		const accountsVisible = this.globalActivityActionBar.hasAction(this.accountAction);
+		const manageVisible = this.globalActivityActionBar.hasAction(this.globalActivityAction);
+		if (accountsVisible === accounts && manageVisible === this.showManage) {
 			return;
 		}
-		if (accountsVisible) {
-			this.globalActivityActionBar.pull(GlobalCompositeBar.ACCOUNTS_ACTION_INDEX);
-		} else {
-			this.globalActivityActionBar.push(this.accountAction, { index: GlobalCompositeBar.ACCOUNTS_ACTION_INDEX });
+		if (accountsVisible !== accounts) {
+			if (accountsVisible) {
+				this.globalActivityActionBar.pull(GlobalCompositeBar.ACCOUNTS_ACTION_INDEX);
+			} else {
+				this.globalActivityActionBar.push(this.accountAction, { index: GlobalCompositeBar.ACCOUNTS_ACTION_INDEX });
+			}
+		}
+		if (manageVisible !== this.showManage) {
+			if (manageVisible) {
+				this.globalActivityActionBar.pull(this.globalActivityActionBar.length() - 1);
+			} else {
+				this.globalActivityActionBar.push(this.globalActivityAction);
+			}
 		}
 		this._onDidChange.fire();
 	}

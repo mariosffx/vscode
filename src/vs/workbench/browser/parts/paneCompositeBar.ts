@@ -106,6 +106,12 @@ export interface IPaneCompositeBarOptions {
 	readonly transformContextMenuActionsForComposite?: (actions: IAction[], compositeId: string) => IAction[];
 	readonly colors: (theme: IColorTheme) => ICompositeBarColors;
 	readonly filter?: IPaneCompositeBarFilter;
+
+	/**
+	 * View containers that are not pinned when they first appear on the bar, so they stay hidden
+	 * until the user shows them.
+	 */
+	readonly unpinnedByDefault?: readonly string[];
 }
 
 export class PaneCompositeBar extends Disposable {
@@ -389,7 +395,11 @@ export class PaneCompositeBar extends Disposable {
 			// Pin it by default if it is new
 			const cachedViewContainer = this.cachedViewContainers.filter(({ id }) => id === viewContainer.id)[0];
 			if (!cachedViewContainer) {
-				this.compositeBar.pin(viewContainer.id);
+				if (this.options.unpinnedByDefault?.includes(viewContainer.id)) {
+					this.compositeBar.unpin(viewContainer.id);
+				} else {
+					this.compositeBar.pin(viewContainer.id);
+				}
 			}
 
 			// Active

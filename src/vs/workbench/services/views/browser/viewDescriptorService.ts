@@ -124,6 +124,7 @@ export class ViewDescriptorService extends Disposable implements IViewDescriptor
 		}));
 
 		this._register(this.storageService.onDidChangeValue(StorageScope.PROFILE, ViewDescriptorService.VIEWS_CUSTOMIZATIONS, this._store)(() => this.onDidStorageChange()));
+		this._register(this.storageService.onDidChangeValue(StorageScope.APPLICATION, ViewDescriptorService.VIEWS_CUSTOMIZATIONS, this._store)(() => this.onDidStorageChange()));
 
 		this.extensionService.whenInstalledExtensionsRegistered().then(() => this.whenExtensionsRegistered());
 
@@ -712,13 +713,18 @@ export class ViewDescriptorService extends Disposable implements IViewDescriptor
 		if (this.isSessionsWindow) {
 			return '{}';
 		}
-		return this.storageService.get(ViewDescriptorService.VIEWS_CUSTOMIZATIONS, StorageScope.PROFILE, '{}');
+		// View locations are shared by all profiles. A profile's own value is the fallback until
+		// the first change, so the layout of the profile that makes it carries over.
+		return this.storageService.get(ViewDescriptorService.VIEWS_CUSTOMIZATIONS, StorageScope.APPLICATION)
+			?? this.storageService.get(ViewDescriptorService.VIEWS_CUSTOMIZATIONS, StorageScope.PROFILE, '{}');
 	}
 
 	private setStoredViewCustomizationsValue(value: string): void {
 		if (this.isSessionsWindow) {
 			return;
 		}
+		this.storageService.store(ViewDescriptorService.VIEWS_CUSTOMIZATIONS, value, StorageScope.APPLICATION, StorageTarget.USER);
+		// Also kept in the profile, which profile export and Settings Sync read
 		this.storageService.store(ViewDescriptorService.VIEWS_CUSTOMIZATIONS, value, StorageScope.PROFILE, StorageTarget.USER);
 	}
 

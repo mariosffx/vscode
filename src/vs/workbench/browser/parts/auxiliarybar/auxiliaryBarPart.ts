@@ -55,6 +55,9 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	static readonly placeholdeViewContainersKey = 'workbench.auxiliarybar.placeholderPanels';
 	static readonly viewContainersWorkspaceStateKey = 'workbench.auxiliarybar.viewContainersWorkspaceState';
 
+	/** Chat starts hidden on the Secondary Side Bar's rail; Source Control is the default view container there. */
+	static readonly unpinnedByDefault: readonly string[] = ['workbench.panel.chat'];
+
 	// Use the side bar dimensions
 	override readonly minimumWidth: number = 170;
 	override readonly maximumWidth: number = Number.POSITIVE_INFINITY;
@@ -103,7 +106,8 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		focusContext: AuxiliaryBarBottomFocusContext,
 		titleMenuId: MenuId.AuxiliaryBarBottomTitle,
 		partContainerClass: 'auxiliarybar',
-		showCompositeBar: () => this.shouldShowCompositeBar() // the bottom half shows its items in its title when the rail does not
+		showCompositeBar: () => this.shouldShowCompositeBar(), // the bottom half shows its items in its title when the rail does not
+		defaultBottomViewContainers: ['workbench.view.extensions'] // Extensions start at the bottom, above Manage
 	}));
 
 	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;
@@ -114,7 +118,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		pinnedViewContainersKey: AuxiliaryBarPart.pinnedViewsKey,
 		placeholderViewContainersKey: AuxiliaryBarPart.placeholdeViewContainersKey,
 		viewContainersWorkspaceStateKey: AuxiliaryBarPart.viewContainersWorkspaceStateKey,
-		globalActivities: false,
+		unpinnedByDefault: AuxiliaryBarPart.unpinnedByDefault,
 		split: {
 			bottomPart: this.split.bottomPart,
 			topFilter: this.split.topFilter,
@@ -358,6 +362,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 			pinnedViewContainersKey: AuxiliaryBarPart.pinnedViewsKey,
 			placeholderViewContainersKey: AuxiliaryBarPart.placeholdeViewContainersKey,
 			viewContainersWorkspaceStateKey: AuxiliaryBarPart.viewContainersWorkspaceStateKey,
+			unpinnedByDefault: AuxiliaryBarPart.unpinnedByDefault,
 			filter: this.split.topFilter,
 			transformContextMenuActionsForComposite: (actions, id) => [...actions, ...this.split.getMoveActions(id)],
 			icon: !this.configuration.showLabels,

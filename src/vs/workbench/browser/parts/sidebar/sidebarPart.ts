@@ -97,7 +97,6 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
 		placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
 		viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
-		globalActivities: true,
 		split: {
 			bottomPart: this.split.bottomPart,
 			topFilter: this.split.topFilter,

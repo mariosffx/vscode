@@ -48,8 +48,16 @@ export function getBottomPaneHeight(totalHeight: number, ratio: number, minimumP
 }
 
 /**
+ * Reads a layout value shared by all profiles. Values stored per profile before the layout
+ * became shared serve as the fallback until the first change.
+ */
+function getSharedValue(storageService: IStorageService, key: string): string | undefined {
+	return storageService.get(key, StorageScope.APPLICATION) ?? storageService.get(key, StorageScope.PROFILE);
+}
+
+/**
  * Remembers which view containers of one location live in the bottom half of its side bar.
- * Every other view container of that location lives in the top half. Stored per profile.
+ * Every other view container of that location lives in the top half. Shared by all profiles.
  */
 export class PaneCompositeSlots extends Disposable {
 
@@ -61,6 +69,7 @@ export class PaneCompositeSlots extends Disposable {
 	constructor(
 		private readonly location: ViewContainerLocation,
 		private readonly storageKey: string,
+		private readonly defaultBottom: readonly string[],
 		@IStorageService private readonly storageService: IStorageService,
 		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
 	) {
@@ -68,7 +77,7 @@ export class PaneCompositeSlots extends Disposable {
 
 		this.bottom = this.load();
 
-		this._register(this.storageService.onDidChangeValue(StorageScope.PROFILE, this.storageKey, this._store)(() => this.update(this.load())));
+		this._register(this.storageService.onDidChangeValue(StorageScope.APPLICATION, this.storageKey, this._store)(() => this.update(this.load())));
 
 		// A view container that leaves this location also leaves its slot, so it returns to the
 		// top half when it comes back.
@@ -95,7 +104,7 @@ export class PaneCompositeSlots extends Disposable {
 			bottom.delete(viewContainerId);
 		}
 
-		this.storageService.store(this.storageKey, JSON.stringify([...bottom]), StorageScope.PROFILE, StorageTarget.USER);
+		this.storageService.store(this.storageKey, JSON.stringify([...bottom]), StorageScope.APPLICATION, StorageTarget.USER);
 		this.update(bottom);
 	}
 
@@ -109,8 +118,13 @@ export class PaneCompositeSlots extends Disposable {
 	}
 
 	private load(): ReadonlySet<string> {
+		const stored = getSharedValue(this.storageService, this.storageKey);
+		if (stored === undefined) {
+			return new Set(this.defaultBottom);
+		}
+
 		try {
-			const value: unknown = JSON.parse(this.storageService.get(this.storageKey, StorageScope.PROFILE, '[]'));
+			const value: unknown = JSON.parse(stored);
 			return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
 		} catch {
 			return new Set();
@@ -308,6 +322,11 @@ export interface IPaneCompositeSplitOptions {
 	 * shows its view containers.
 	 */
 	readonly showCompositeBar: () => boolean;
+
+	/**
+	 * View containers that start in the bottom half, until the user moves any.
+	 */
+	readonly defaultBottomViewContainers?: readonly string[];
 }
 
 /**
@@ -369,7 +388,7 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 	) {
 		super();
 
-		this.slots = this._register(instantiationService.createInstance(PaneCompositeSlots, options.location, `${options.storagePrefix}.viewContainers`));
+		this.slots = this._register(instantiationService.createInstance(PaneCompositeSlots, options.location, `${options.storagePrefix}.viewContainers`, options.defaultBottomViewContainers ?? []));
 		this.bottomPinnedViewContainersKey = `${options.storagePrefix}.pinnedViewContainers`;
 		this.bottomPlaceholderViewContainersKey = `${options.storagePrefix}.placeholderViewContainers`;
 		this.bottomViewContainersWorkspaceStateKey = `${options.storagePrefix}.viewContainersWorkspaceState`;
@@ -687,12 +706,12 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 	}
 
 	private loadRatio(): number {
-		const value = Number(this.storageService.get(this.ratioStorageKey, StorageScope.PROFILE));
+		const value = Number(getSharedValue(this.storageService, this.ratioStorageKey));
 		return Number.isFinite(value) && value > 0 ? this.clampRatio(value) : PaneCompositeSplit.DEFAULT_RATIO;
 	}
 
 	private storeRatio(): void {
-		this.storageService.store(this.ratioStorageKey, String(this.ratio), StorageScope.PROFILE, StorageTarget.MACHINE);
+		this.storageService.store(this.ratioStorageKey, String(this.ratio), StorageScope.APPLICATION, StorageTarget.MACHINE);
 	}
 
 	private clampRatio(ratio: number): number {

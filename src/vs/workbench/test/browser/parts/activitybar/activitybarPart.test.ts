@@ -127,7 +127,6 @@ suite('ActivitybarPart', () => {
 				pinnedViewContainersKey: isPrimary ? ActivitybarPart.pinnedViewContainersKey : 'test.auxiliary.pinned',
 				placeholderViewContainersKey: isPrimary ? ActivitybarPart.placeholderViewContainersKey : 'test.auxiliary.placeholder',
 				viewContainersWorkspaceStateKey: isPrimary ? ActivitybarPart.viewContainersWorkspaceStateKey : 'test.auxiliary.workspaceState',
-				globalActivities: isPrimary
 			},
 			stubInstantiationService,
 			layoutService,

@@ -19,12 +19,12 @@ suite('PaneCompositeSplit', () => {
 
 	const STORAGE_KEY = 'test.bottom.viewContainers';
 
-	function createSlots(store: DisposableStore, storageService = store.add(new TestStorageService())) {
+	function createSlots(store: DisposableStore, storageService = store.add(new TestStorageService()), defaultBottom: readonly string[] = []) {
 		const onDidChangeContainerLocation = store.add(new Emitter<{ viewContainer: ViewContainer; from: ViewContainerLocation; to: ViewContainerLocation }>());
 		const viewDescriptorService = new class extends mock<IViewDescriptorService>() {
 			override onDidChangeContainerLocation = onDidChangeContainerLocation.event;
 		};
-		const slots = store.add(new PaneCompositeSlots(ViewContainerLocation.Sidebar, STORAGE_KEY, storageService, viewDescriptorService));
+		const slots = store.add(new PaneCompositeSlots(ViewContainerLocation.Sidebar, STORAGE_KEY, defaultBottom, storageService, viewDescriptorService));
 		let changes = 0;
 		store.add(slots.onDidChange(() => changes++));
 		const moveContainer = (id: string, from: ViewContainerLocation, to: ViewContainerLocation) => onDidChangeContainerLocation.fire({ viewContainer: { id } as ViewContainer, from, to });
@@ -66,7 +66,7 @@ suite('PaneCompositeSplit', () => {
 			scm: slots.isInBottom('scm'),
 			extensions: slots.isInBottom('extensions'),
 			explorer: slots.isInBottom('explorer'),
-			stored: JSON.parse(storageService.get(STORAGE_KEY, StorageScope.PROFILE, '[]')),
+			stored: JSON.parse(storageService.get(STORAGE_KEY, StorageScope.APPLICATION, '[]')),
 			changes: changes(),
 		}, {
 			scm: true,
@@ -77,21 +77,22 @@ suite('PaneCompositeSplit', () => {
 		});
 	});
 
-	test('slots restore from storage, ignore malformed values, and follow storage changes', () => {
+	test('slots restore from storage, fall back to the profile, ignore malformed values, and follow storage changes', () => {
 		const store = disposables.add(new DisposableStore());
 		const storageService = store.add(new TestStorageService());
+		// stored per profile before the layout became shared by all profiles
 		storageService.store(STORAGE_KEY, JSON.stringify(['scm', 42, 'search']), StorageScope.PROFILE, StorageTarget.USER);
 
 		const { slots, changes } = createSlots(store, storageService);
 		const restored = { scm: slots.isInBottom('scm'), search: slots.isInBottom('search') };
 
 		// another window changes the stored value
-		storageService.store(STORAGE_KEY, JSON.stringify(['search']), StorageScope.PROFILE, StorageTarget.USER);
+		storageService.store(STORAGE_KEY, JSON.stringify(['search']), StorageScope.APPLICATION, StorageTarget.USER);
 		const afterExternalChange = { scm: slots.isInBottom('scm'), search: slots.isInBottom('search'), changes: changes() };
 
 		const malformed = disposables.add(new DisposableStore());
 		const malformedStorage = malformed.add(new TestStorageService());
-		malformedStorage.store(STORAGE_KEY, '{not json', StorageScope.PROFILE, StorageTarget.USER);
+		malformedStorage.store(STORAGE_KEY, '{not json', StorageScope.APPLICATION, StorageTarget.USER);
 		const { slots: malformedSlots } = createSlots(malformed, malformedStorage);
 
 		assert.deepStrictEqual({
@@ -102,6 +103,23 @@ suite('PaneCompositeSplit', () => {
 			restored: { scm: true, search: true },
 			afterExternalChange: { scm: false, search: true, changes: 1 },
 			malformed: false,
+		});
+	});
+
+	test('slots start with the default bottom view containers until any assignment is stored', () => {
+		const fresh = createSlots(disposables.add(new DisposableStore()), undefined, ['extensions']);
+
+		const storedStore = disposables.add(new DisposableStore());
+		const storedStorage = storedStore.add(new TestStorageService());
+		storedStorage.store(STORAGE_KEY, JSON.stringify([]), StorageScope.APPLICATION, StorageTarget.USER);
+		const stored = createSlots(storedStore, storedStorage, ['extensions']);
+
+		assert.deepStrictEqual({
+			fresh: fresh.slots.isInBottom('extensions'),
+			storedEmpty: stored.slots.isInBottom('extensions'),
+		}, {
+			fresh: true,
+			storedEmpty: false,
 		});
 	});
 

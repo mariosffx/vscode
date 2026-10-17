@@ -18,13 +18,19 @@ import { ACCOUNTS_ACTIVITY_ID, ACCOUNTS_SHARED_SIGN_IN_GROUP, GLOBAL_ACTIVITY_ID
 interface IGlobalCompositeBarTestHarness {
 	globalActivityActionBar: ActionBar;
 	accountAction: Action;
+	globalActivityAction: Action;
+	showAccounts: boolean;
+	showManage: boolean;
 	accountsVisibilityPreference: boolean;
 	_onDidChange: Emitter<void>;
 	getHeight: typeof GlobalCompositeBar.prototype.getHeight;
 	toggleAccountsActivity(): void;
+	updateActions(): void;
+	setVisibleActivities: typeof GlobalCompositeBar.prototype.setVisibleActivities;
 }
 
 const toggleAccountsActivity = Reflect.get(GlobalCompositeBar.prototype, 'toggleAccountsActivity') as (this: IGlobalCompositeBarTestHarness) => void;
+const updateActions = Reflect.get(GlobalCompositeBar.prototype, 'updateActions') as (this: IGlobalCompositeBarTestHarness) => void;
 
 suite('GlobalCompositeBar', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -35,14 +41,20 @@ suite('GlobalCompositeBar', () => {
 		if (accountsVisible) {
 			globalActivityActionBar.push(accountAction);
 		}
-		globalActivityActionBar.push(store.add(new Action(GLOBAL_ACTIVITY_ID)));
+		const globalActivityAction = store.add(new Action(GLOBAL_ACTIVITY_ID));
+		globalActivityActionBar.push(globalActivityAction);
 		return {
 			globalActivityActionBar,
 			accountAction,
+			globalActivityAction,
+			showAccounts: true,
+			showManage: true,
 			accountsVisibilityPreference: accountsVisible,
 			_onDidChange: store.add(new Emitter<void>()),
 			getHeight: GlobalCompositeBar.prototype.getHeight,
 			toggleAccountsActivity,
+			updateActions,
+			setVisibleActivities: GlobalCompositeBar.prototype.setVisibleActivities,
 		};
 	}
 
@@ -81,6 +93,34 @@ suite('GlobalCompositeBar', () => {
 		bar.toggleAccountsActivity();
 
 		assert.deepStrictEqual({ heights, height: bar.getHeight(28, 0), actions: bar.globalActivityActionBar.length() }, { heights: [], height: 28, actions: 1 });
+	});
+
+	test('shows only the chosen global activities, keeping Accounts first', () => {
+		const bar = createGlobalBar(true);
+		const ids = () => Array.from({ length: bar.globalActivityActionBar.length() }, (_, index) => bar.globalActivityActionBar.getAction(index)!.id);
+		let changes = 0;
+		store.add(bar._onDidChange.event(() => changes++));
+
+		bar.setVisibleActivities(true, false);
+		const withoutManage = ids();
+		bar.accountsVisibilityPreference = false;
+		bar.toggleAccountsActivity();
+		const accountsHiddenWithoutManage = ids();
+		bar.accountsVisibilityPreference = true;
+		bar.toggleAccountsActivity();
+		bar.setVisibleActivities(true, true);
+		const both = ids();
+		bar.setVisibleActivities(false, true);
+		const manageOnly = ids();
+		bar.setVisibleActivities(false, true);
+
+		assert.deepStrictEqual({ withoutManage, accountsHiddenWithoutManage, both, manageOnly, changes }, {
+			withoutManage: [ACCOUNTS_ACTIVITY_ID],
+			accountsHiddenWithoutManage: [],
+			both: [ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID],
+			manageOnly: [GLOBAL_ACTIVITY_ID],
+			changes: 5,
+		});
 	});
 });
 

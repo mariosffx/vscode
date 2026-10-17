@@ -12,6 +12,7 @@ import { mainWindow } from '../../../../base/browser/window.js';
 import { ActivityBarPosition, AuxiliaryActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position, FLOATING_PANEL_INNER_MARGIN, FLOATING_PANEL_MARGIN, getFloatingPanelMargin, getFloatingPanelOuterMargin, isFloatingTopEdgeExposed } from '../../../services/layout/browser/layoutService.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { Event } from '../../../../base/common/event.js';
 import { ToggleSidebarPositionAction, ToggleSidebarVisibilityAction } from '../../actions/layoutActions.js';
 import { IThemeService, IColorTheme, registerThemingParticipant } from '../../../../platform/theme/common/themeService.js';
 import { ACTIVITY_BAR_BACKGROUND, ACTIVITY_BAR_BORDER, ACTIVITY_BAR_FOREGROUND, ACTIVITY_BAR_ACTIVE_BORDER, ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_INACTIVE_FOREGROUND, ACTIVITY_BAR_ACTIVE_BACKGROUND, ACTIVITY_BAR_DRAG_AND_DROP_BORDER, ACTIVITY_BAR_ACTIVE_FOCUS_BORDER, MODERN_ACTIVITY_BAR_BACKGROUND, MODERN_ACTIVITY_BAR_INACTIVE_BACKGROUND } from '../../../common/theme.js';
@@ -48,16 +49,17 @@ import { ToggleAuxiliaryBarAction } from '../auxiliarybar/auxiliaryBarActions.js
  * Configures which rail an {@link ActivitybarPart} instance is. The workbench has two: the
  * primary activity bar beside the Primary Side Bar, and the secondary activity bar beside
  * the Secondary Side Bar on the opposite edge. Both share the same rendering; they differ in
- * the part they are, the storage keys of the pinned view containers and whether they host
- * the global activities (Accounts, Manage) and the compact menu bar.
+ * the part they are and the storage keys of the pinned view containers. The primary rail hosts
+ * Accounts and the compact menu bar; Manage sits at the bottom of the secondary rail, or of the
+ * primary rail while the secondary rail is hidden.
  */
 export interface IActivitybarPartOptions {
 	readonly partId: Parts.ACTIVITYBAR_PART | Parts.AUXILIARY_ACTIVITYBAR_PART;
 	readonly pinnedViewContainersKey: string;
 	readonly placeholderViewContainersKey: string;
 	readonly viewContainersWorkspaceStateKey: string;
-	/** Whether the rail hosts the global activities (Accounts, Manage) and the compact menu bar. */
-	readonly globalActivities: boolean;
+	/** View containers that stay hidden on the rail until the user shows them. */
+	readonly unpinnedByDefault?: readonly string[];
 	/** When the side bar can split, the rail shows a second group of items for its bottom half. */
 	readonly split?: IActivitybarSplitOptions;
 }
@@ -337,6 +339,7 @@ export class ActivitybarPart extends Part {
 			pinnedViewContainersKey: this.railOptions.pinnedViewContainersKey,
 			placeholderViewContainersKey: this.railOptions.placeholderViewContainersKey,
 			viewContainersWorkspaceStateKey: this.railOptions.viewContainersWorkspaceStateKey,
+			unpinnedByDefault: this.railOptions.unpinnedByDefault,
 			filter: split?.topFilter,
 			transformContextMenuActionsForComposite: split ? (actions, id) => [...actions, ...split.getMoveActions(id)] : undefined,
 			orientation: ActionsOrientation.VERTICAL,
@@ -373,7 +376,7 @@ export class ActivitybarPart extends Part {
 			}
 		} : undefined;
 
-		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.location, options, this.partId, this.paneCompositePart, this.railOptions.globalActivities ? { actionHeight: this.actionHeight, actionGap: this.actionGap } : undefined, bottomGroup);
+		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.location, options, this.partId, this.paneCompositePart, { actionHeight: this.actionHeight, actionGap: this.actionGap }, bottomGroup);
 	}
 
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
@@ -556,6 +559,15 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 					this.layout(this.lastLayoutDimensions.width, this.lastLayoutDimensions.height);
 				}
 			}));
+
+			// Manage lives at the bottom of the secondary rail, and falls back to the primary
+			// rail while the secondary rail is hidden so it stays reachable
+			if (this.part === Parts.AUXILIARY_ACTIVITYBAR_PART) {
+				this.globalCompositeBar.setVisibleActivities(false, true);
+			} else {
+				this._register(Event.filter(layoutService.onDidChangePartVisibility, e => e.partId === Parts.AUXILIARY_ACTIVITYBAR_PART)(() => this.updateGlobalActivities()));
+				this._register(layoutService.onDidChangeAuxiliaryBarMaximized(() => this.updateGlobalActivities()));
+			}
 		}
 
 		if (bottomGroup) {
@@ -584,6 +596,10 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 				}
 			}
 		}));
+	}
+
+	private updateGlobalActivities(): void {
+		this.globalCompositeBar?.setVisibleActivities(true, !this.layoutService.isVisible(Parts.AUXILIARY_ACTIVITYBAR_PART));
 	}
 
 	/**
@@ -710,6 +726,9 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		// Global action bar
 		if (this.globalCompositeBar) {
 			this.globalCompositeBar.create(this.element);
+			if (this.part === Parts.ACTIVITYBAR_PART) {
+				this.updateGlobalActivities();
+			}
 		}
 
 		// Keyboard Navigation

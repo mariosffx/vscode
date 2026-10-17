@@ -8,6 +8,26 @@
 	position: relative;
 }
 
+/*
+ * Separator between the two halves, drawn by the sash so it stays above both titles and
+ * shows only while the bottom half is open. It is the sash's own background, which leaves
+ * both pseudo-elements free: `::before` for the hover highlight and `::after` for the grip.
+ */
+.monaco-workbench .monaco-sash.pane-composite-split-sash:not(.disabled) {
+	--pane-composite-split-line: var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-modernSash-gripForeground) 60%, transparent));
+	background: linear-gradient(var(--pane-composite-split-line), var(--pane-composite-split-line)) center / 100% 1px no-repeat;
+}
+
+/* With the Modern UI the separator also carries the three-dot grip of the other resizable
+ * part boundaries, which it hides inside parts, and the line leaves a gap around it. */
+.modern-ui:not(.modern-ui-compact) .monaco-sash.pane-composite-split-sash:not(.disabled) {
+	background: linear-gradient(to right, var(--pane-composite-split-line) calc(50% - 12px), transparent 0 calc(50% + 12px), var(--pane-composite-split-line) 0) center / 100% 1px no-repeat;
+}
+
+.modern-ui:not(.modern-ui-compact) .part .monaco-sash.pane-composite-split-sash:not(.disabled)::after {
+	content: '';
+}
+
 /* Bottom half of a split side bar, sized by PaneCompositeSplit */
 .monaco-workbench .pane-composite-split-bottom {
 	display: none;

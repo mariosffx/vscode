@@ -86,7 +86,8 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		focusContext: SidebarBottomFocusContext,
 		titleMenuId: MenuId.SidebarBottomTitle,
 		partContainerClass: 'sidebar',
-		showCompositeBar: () => this.shouldShowCompositeBar() // the bottom half shows its items in its title when the rail does not
+		showCompositeBar: () => this.shouldShowCompositeBar(), // the bottom half shows its items in its title when the rail does not
+		defaultBottomViewContainers: ['workbench.view.debug'] // Run and Debug starts at the bottom, above Accounts
 	}));
 
 	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;

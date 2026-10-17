@@ -75,8 +75,9 @@ registerAction2(ToggleAuxiliaryBarAction);
 
 MenuRegistry.appendMenuItem(MenuId.AuxiliaryBarTitle, {
 	command: {
-		id: ToggleAuxiliaryBarAction.ID,
-		title: localize('closeSecondarySideBar', 'Hide Secondary Side Bar'),
+		// Closes only the top half while the bottom half shows a view, and the side bar otherwise
+		id: 'workbench.action.closeAuxiliaryBarTop',
+		title: localize('closeSecondarySideBarTop', 'Close Top Half of Secondary Side Bar'),
 		icon: closeIcon
 	},
 	group: 'navigation',

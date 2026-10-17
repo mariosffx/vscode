@@ -781,6 +781,9 @@ export class TestPaneCompositeService extends Disposable implements IPaneComposi
 			part.resetViewContainerLayout?.();
 		}
 	}
+	closeTopPaneComposite(viewContainerLocation: ViewContainerLocation): boolean {
+		return this.getPartByLocation(viewContainerLocation).closeTopPaneComposite?.() ?? false;
+	}
 
 	getPinnedPaneCompositeIds(viewContainerLocation: ViewContainerLocation): string[] {
 		throw new Error('Method not implemented.');

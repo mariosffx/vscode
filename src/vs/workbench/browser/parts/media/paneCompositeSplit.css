@@ -28,6 +28,11 @@
 	content: '';
 }
 
+/* With its top half closed, the bottom half takes the whole side bar */
+.monaco-workbench .part.pane-composite-split-host.split-top-closed > :not(.pane-composite-split-bottom):not(.monaco-sash) {
+	display: none;
+}
+
 /* Bottom half of a split side bar, sized by PaneCompositeSplit */
 .monaco-workbench .pane-composite-split-bottom {
 	display: none;

@@ -92,4 +92,11 @@ export interface IPaneCompositePartService {
 	 * the view descriptor service.
 	 */
 	resetViewContainerLayout(): void;
+
+	/**
+	 * Closes the view container in the top half of a split side bar at the location while its
+	 * bottom half stays open. Returns `false` when the bottom half is closed, in which case the
+	 * caller hides the side bar instead.
+	 */
+	closeTopPaneComposite(viewContainerLocation: ViewContainerLocation): boolean;
 }

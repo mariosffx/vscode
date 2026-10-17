@@ -84,6 +84,12 @@ export interface IPaneCompositePart extends IView {
 	resetViewContainerLayout?(): void;
 
 	/**
+	 * Closes the top half of a split side bar while its bottom half stays open. Returns `false`
+	 * when the part cannot split or its bottom half is closed, so the caller hides the part.
+	 */
+	closeTopPaneComposite?(): boolean;
+
+	/**
 	 * Opens a viewlet with the given identifier and pass keyboard focus to it if specified.
 	 */
 	openPaneComposite(id: string | undefined, focus?: boolean): Promise<IPaneComposite | undefined>;
@@ -171,6 +177,12 @@ export interface IPaneCompositeSplit {
 	 * Puts the default view containers back in the bottom half and restores the default split size.
 	 */
 	reset(): void;
+
+	/**
+	 * Closes the top half while the bottom half is open, which then takes the whole side bar.
+	 * Returns `false` without closing anything when the bottom half is closed.
+	 */
+	closeTop(): boolean;
 }
 
 export abstract class AbstractPaneCompositePart extends CompositePart<PaneComposite> implements IPaneCompositePart {
@@ -295,6 +307,10 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	resetViewContainerLayout(): void {
 		this.paneCompositeBar.value?.resetHiddenByDefault();
 		this.getSplit()?.reset();
+	}
+
+	closeTopPaneComposite(): boolean {
+		return this.getSplit()?.closeTop() ?? false;
 	}
 
 	/**
@@ -723,6 +739,14 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 			this.layoutService.setPartHidden(true, this.partId);
 		}
 
+		this.hideActiveComposite();
+	}
+
+	/**
+	 * Closes the active view container but keeps the part visible, as when the top half of a
+	 * split side bar closes while its bottom half stays open.
+	 */
+	closeActivePaneComposite(): void {
 		this.hideActiveComposite();
 	}
 

@@ -890,9 +890,11 @@ class ViewContainerActivityAction extends CompositeBarAction {
 					case 'toggle':
 					default:
 						// Hide the side bar if the selected view container is already visible in it, or
-						// close just the bottom half of a split side bar when it shows the item.
+						// close just one half of a split side bar while the other half shows a view.
 						if (this.paneCompositePart.partId === sideBarPart) {
-							this.layoutService.setPartHidden(true, sideBarPart);
+							if (!this.paneCompositePart.closeTopPaneComposite?.()) {
+								this.layoutService.setPartHidden(true, sideBarPart);
+							}
 						} else {
 							this.paneCompositePart.hideActivePaneComposite();
 						}

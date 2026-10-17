@@ -16,7 +16,7 @@ import { Action2, IMenuService, MenuId, registerAction2 } from '../../../platfor
 import { Codicon } from '../../../base/common/codicons.js';
 import { Categories } from '../../../platform/action/common/actionCommonCategories.js';
 import { IPaneCompositePartService } from '../../services/panecomposite/browser/panecomposite.js';
-import { ActiveAuxiliaryBottomContext, ActiveViewletBottomContext } from '../../common/contextkeys.js';
+import { ActiveAuxiliaryBottomContext, ActiveViewletBottomContext, AuxiliaryBarVisibleContext, SideBarVisibleContext } from '../../common/contextkeys.js';
 import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { IContextKeyService, RawContextKey } from '../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../platform/contextview/browser/contextView.js';
@@ -387,6 +387,12 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 	 */
 	private hiddenWithHost: string | undefined;
 
+	/**
+	 * Whether the user closed the top half while the bottom half stays open, which then takes
+	 * the whole side bar.
+	 */
+	private topClosed = false;
+
 	constructor(
 		private readonly options: IPaneCompositeSplitOptions,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -462,6 +468,19 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 		this.bottomPart.hideActivePaneComposite();
 	}
 
+	closeTop(): boolean {
+		// Without a vertical rail the top half's title holds the icons of both halves, so it stays
+		if (!this.isOpen() || this.options.showCompositeBar()) {
+			return false;
+		}
+
+		this.topClosed = true;
+		this.options.host.closeActivePaneComposite();
+		this.updateVisibility();
+		this.options.host.relayoutPart();
+		return true;
+	}
+
 	isInBottom(viewContainerId: string): boolean {
 		return this.slots.isInBottom(viewContainerId);
 	}
@@ -498,7 +517,7 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 	 */
 	private ensureTopPaneComposite(): void {
 		const host = this.options.host;
-		if (host.getActivePaneComposite() || !this.layoutService.isVisible(this.options.hostPartId)) {
+		if (this.topClosed || host.getActivePaneComposite() || !this.layoutService.isVisible(this.options.hostPartId)) {
 			return;
 		}
 
@@ -605,6 +624,13 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 			}
 		}));
 		this._register(this.sash.onDidEnd(() => this.storeRatio()));
+		this._register(this.options.host.onDidPaneCompositeOpen(() => {
+			if (this.topClosed) {
+				this.topClosed = false;
+				this.updateVisibility();
+				this.options.host.relayoutPart();
+			}
+		}));
 		this._register(this.sash.onDidReset(() => {
 			this.ratio = PaneCompositeSplit.DEFAULT_RATIO;
 			this.storeRatio();
@@ -620,7 +646,7 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 			return height;
 		}
 
-		const bottomHeight = getBottomPaneHeight(height, this.ratio, PaneCompositeSplit.MINIMUM_PANE_HEIGHT);
+		const bottomHeight = this.topClosed ? height : getBottomPaneHeight(height, this.ratio, PaneCompositeSplit.MINIMUM_PANE_HEIGHT);
 
 		this.lastTotalHeight = height;
 		this.lastBottomHeight = bottomHeight;
@@ -670,6 +696,14 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 			}
 		}
 
+		// With the top half closed as well, nothing is left to show
+		if (!openId && this.topClosed) {
+			this.topClosed = false;
+			if (this.layoutService.isVisible(this.options.hostPartId)) {
+				this.layoutService.setPartHidden(true, this.options.hostPartId);
+			}
+		}
+
 		this.updateVisibility();
 		this.options.host.relayoutPart();
 		this._onDidChangeTopFilter.fire();
@@ -677,6 +711,9 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 
 	private onDidChangeHostVisibility(visible: boolean): void {
 		if (!visible) {
+			// Showing the side bar again restores its top half, as the layout reopens it
+			this.topClosed = false;
+
 			// Close the bottom half with its side bar, so its views know they are not visible
 			const active = this.bottomPart.getActivePaneComposite()?.getId();
 			if (active) {
@@ -697,8 +734,9 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 		if (this.wrapper) {
 			this.wrapper.classList.toggle('visible', open);
 		}
+		this.host?.classList.toggle('split-top-closed', open && this.topClosed);
 		if (this.sash) {
-			this.sash.state = open ? SashState.Enabled : SashState.Disabled;
+			this.sash.state = open && !this.topClosed ? SashState.Enabled : SashState.Disabled;
 		}
 	}
 
@@ -778,6 +816,54 @@ registerAction2(class extends Action2 {
 
 	run(accessor: ServicesAccessor): void {
 		accessor.get(IPaneCompositePartService).hideBottomPaneComposite(ViewContainerLocation.AuxiliaryBar);
+	}
+});
+
+//#endregion
+
+//#region Close the top half
+
+/**
+ * Closes the top half of a split side bar, keeping the side bar open while its bottom half
+ * shows a view. With the bottom half closed it hides the side bar.
+ */
+function closeTopHalf(accessor: ServicesAccessor, location: ViewContainerLocation, part: Parts.SIDEBAR_PART | Parts.AUXILIARYBAR_PART): void {
+	if (!accessor.get(IPaneCompositePartService).closeTopPaneComposite(location)) {
+		accessor.get(IWorkbenchLayoutService).setPartHidden(true, part);
+	}
+}
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'workbench.action.closeSideBarTop',
+			title: localize2('closeSideBarTop', "Close Top Half of Primary Side Bar"),
+			category: Categories.View,
+			icon: Codicon.close,
+			precondition: SideBarVisibleContext,
+			f1: true
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		closeTopHalf(accessor, ViewContainerLocation.Sidebar, Parts.SIDEBAR_PART);
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'workbench.action.closeAuxiliaryBarTop',
+			title: localize2('closeAuxiliaryBarTop', "Close Top Half of Secondary Side Bar"),
+			category: Categories.View,
+			icon: Codicon.close,
+			precondition: AuxiliaryBarVisibleContext,
+			f1: true
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		closeTopHalf(accessor, ViewContainerLocation.AuxiliaryBar, Parts.AUXILIARYBAR_PART);
 	}
 });
 

@@ -114,6 +114,12 @@ export class PaneCompositePartService extends Disposable implements IPaneComposi
 		this.getPartByLocation(viewContainerLocation).hideBottomPaneComposite?.();
 	}
 
+	resetViewContainerLayout(): void {
+		for (const part of this.paneCompositeParts.values()) {
+			part.resetViewContainerLayout?.();
+		}
+	}
+
 	private getPartByLocation(viewContainerLocation: ViewContainerLocation): IPaneCompositePart {
 		return assertReturnsDefined(this.paneCompositeParts.get(viewContainerLocation));
 	}

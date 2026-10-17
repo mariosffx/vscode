@@ -78,6 +78,12 @@ export interface IPaneCompositePart extends IView {
 	hideBottomPaneComposite?(): void;
 
 	/**
+	 * Hides the view containers that start hidden on this part's bars again and, for a split
+	 * side bar, restores its default halves and split size.
+	 */
+	resetViewContainerLayout?(): void;
+
+	/**
 	 * Opens a viewlet with the given identifier and pass keyboard focus to it if specified.
 	 */
 	openPaneComposite(id: string | undefined, focus?: boolean): Promise<IPaneComposite | undefined>;
@@ -160,6 +166,11 @@ export interface IPaneCompositeSplit {
 	 * for the hosting part.
 	 */
 	layout(width: number, height: number): number;
+
+	/**
+	 * Puts the default view containers back in the bottom half and restores the default split size.
+	 */
+	reset(): void;
 }
 
 export abstract class AbstractPaneCompositePart extends CompositePart<PaneComposite> implements IPaneCompositePart {
@@ -279,6 +290,11 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	 */
 	protected getSplit(): IPaneCompositeSplit | undefined {
 		return undefined;
+	}
+
+	resetViewContainerLayout(): void {
+		this.paneCompositeBar.value?.resetHiddenByDefault();
+		this.getSplit()?.reset();
 	}
 
 	/**

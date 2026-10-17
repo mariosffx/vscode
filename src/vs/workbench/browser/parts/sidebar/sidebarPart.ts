@@ -23,6 +23,7 @@ import { IExtensionService } from '../../../services/extensions/common/extension
 import { LayoutPriority } from '../../../../base/browser/ui/grid/grid.js';
 import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
+import { DEFAULT_SIDEBAR_BOTTOM_VIEW_CONTAINERS } from '../../../common/defaultViewContainerLayout.js';
 import { AbstractPaneCompositePart, CompositeBarPosition, IPaneCompositeSplit } from '../paneCompositePart.js';
 import { PaneCompositeSplit } from '../paneCompositeSplit.js';
 import { IPaneComposite } from '../../../common/panecomposite.js';
@@ -87,7 +88,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		titleMenuId: MenuId.SidebarBottomTitle,
 		partContainerClass: 'sidebar',
 		showCompositeBar: () => this.shouldShowCompositeBar(), // the bottom half shows its items in its title when the rail does not
-		defaultBottomViewContainers: ['workbench.view.debug', 'workbench.view.extension.test'] // Run and Debug, then Testing, start at the bottom, above Accounts
+		defaultBottomViewContainers: DEFAULT_SIDEBAR_BOTTOM_VIEW_CONTAINERS
 	}));
 
 	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;
@@ -203,6 +204,11 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		this.split.refreshCompositeBar();
 
 		this.rememberActivityBarVisiblePosition();
+	}
+
+	override resetViewContainerLayout(): void {
+		super.resetViewContainerLayout();
+		this.activityBarPart.resetHiddenByDefault();
 	}
 
 	protected override getSplit(): IPaneCompositeSplit {

@@ -20,6 +20,7 @@ import { IExtensionService } from '../../services/extensions/common/extensions.j
 import { URI, UriComponents } from '../../../base/common/uri.js';
 import { ToggleCompositePinnedAction, ICompositeBarColors, IActivityHoverOptions, ToggleCompositeBadgeAction, CompositeBarAction, ICompositeBar, ICompositeBarActionItem } from './compositeBarActions.js';
 import { IViewDescriptorService, ViewContainer, IViewContainerModel, ViewContainerLocation } from '../../common/views.js';
+import { UNPINNED_BY_DEFAULT_VIEW_CONTAINERS } from '../../common/defaultViewContainerLayout.js';
 import { IContextKeyService, ContextKeyExpr } from '../../../platform/contextkey/common/contextkey.js';
 import { isString } from '../../../base/common/types.js';
 import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
@@ -108,16 +109,6 @@ export interface IPaneCompositeBarOptions {
 	readonly filter?: IPaneCompositeBarFilter;
 }
 
-/**
- * View containers that are not pinned when they first appear on a bar, so they stay hidden until
- * the user shows them.
- */
-const UNPINNED_BY_DEFAULT_VIEW_CONTAINERS: ReadonlySet<string> = new Set([
-	'workbench.panel.chat', // Chat
-	'workbench.view.extension.copilot-chat', // Chat Debug, from GitHub Copilot Chat
-	'workbench.view.extension.gitlens', // GitLens
-	'workbench.view.extension.gitlensInspect', // GitLens Inspect
-]);
 
 export class PaneCompositeBar extends Disposable {
 
@@ -549,6 +540,15 @@ export class PaneCompositeBar extends Disposable {
 		const compositeActions = this.compositeActions.get(compositeId);
 		if (compositeActions) {
 			this.compositeActions.deleteAndDispose(compositeId);
+		}
+	}
+
+	/**
+	 * Hides the view containers that start hidden again, as when they first appeared on the bar.
+	 */
+	resetHiddenByDefault(): void {
+		for (const id of UNPINNED_BY_DEFAULT_VIEW_CONTAINERS) {
+			this.compositeBar.unpin(id);
 		}
 	}
 

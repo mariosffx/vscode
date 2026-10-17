@@ -84,4 +84,12 @@ export interface IPaneCompositePartService {
 	 * Closes the bottom half of a split side bar at the location.
 	 */
 	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void;
+
+	/**
+	 * Restores the default arrangement of view containers within every location: the view
+	 * containers that start hidden on the bars are hidden again, and split side bars take back
+	 * their default halves and split size. Which location a view container is in is reset by
+	 * the view descriptor service.
+	 */
+	resetViewContainerLayout(): void;
 }

@@ -787,7 +787,10 @@ registerAction2(class extends Action2 {
 	}
 
 	run(accessor: ServicesAccessor): void {
-		return accessor.get(IViewDescriptorService).reset();
+		accessor.get(IViewDescriptorService).reset();
+
+		// After the locations, so view containers are back where their default halves expect them
+		accessor.get(IPaneCompositePartService).resetViewContainerLayout();
 	}
 });
 

@@ -16,6 +16,7 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { ActiveAuxiliaryBottomContext, ActiveAuxiliaryContext, AuxiliaryBarBottomFocusContext, AuxiliaryBarFocusContext } from '../../../common/contextkeys.js';
 import { ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_TOP_ACTIVE_BORDER, ACTIVITY_BAR_TOP_DRAG_AND_DROP_BORDER, ACTIVITY_BAR_TOP_FOREGROUND, ACTIVITY_BAR_TOP_INACTIVE_FOREGROUND, PANEL_ACTIVE_TITLE_BORDER, PANEL_ACTIVE_TITLE_FOREGROUND, PANEL_DRAG_AND_DROP_BORDER, PANEL_INACTIVE_TITLE_FOREGROUND, SIDE_BAR_BACKGROUND, SIDE_BAR_BORDER, SIDE_BAR_TITLE_BORDER, SIDE_BAR_FOREGROUND } from '../../../common/theme.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
+import { DEFAULT_AUXILIARYBAR_BOTTOM_VIEW_CONTAINERS } from '../../../common/defaultViewContainerLayout.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { AuxiliaryActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
@@ -104,7 +105,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		titleMenuId: MenuId.AuxiliaryBarBottomTitle,
 		partContainerClass: 'auxiliarybar',
 		showCompositeBar: () => this.shouldShowCompositeBar(), // the bottom half shows its items in its title when the rail does not
-		defaultBottomViewContainers: ['workbench.view.extension.github-pull-request', 'workbench.view.extension.containersView', 'workbench.view.extensions'] // GitHub Pull Request, Containers and Extensions start at the bottom, above Manage
+		defaultBottomViewContainers: DEFAULT_AUXILIARYBAR_BOTTOM_VIEW_CONTAINERS
 	}));
 
 	readonly onDidBottomPaneCompositeOpen: Event<IPaneComposite> = this.split.onDidBottomPaneCompositeOpen;
@@ -245,6 +246,11 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		this.split.refreshCompositeBar();
 
 		this.rememberActivityBarVisiblePosition();
+	}
+
+	override resetViewContainerLayout(): void {
+		super.resetViewContainerLayout();
+		this.activityBarPart.resetHiddenByDefault();
 	}
 
 	protected override getSplit(): IPaneCompositeSplit {

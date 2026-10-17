@@ -22,6 +22,7 @@ import { CustomTreeView, TreeViewPane } from '../../browser/parts/views/treeView
 import { ViewPaneContainer } from '../../browser/parts/views/viewPaneContainer.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../common/contributions.js';
 import { ICustomViewDescriptor, IViewContainersRegistry, IViewDescriptor, IViewsRegistry, ViewContainer, Extensions as ViewContainerExtensions, ViewContainerLocation } from '../../common/views.js';
+import { getDefaultViewContainerPlacement } from '../../common/defaultViewContainerLayout.js';
 import { VIEWLET_ID as DEBUG } from '../../contrib/debug/common/debug.js';
 import { VIEWLET_ID as EXPLORER } from '../../contrib/files/common/files.js';
 import { VIEWLET_ID as REMOTE } from '../../contrib/remote/browser/remoteExplorer.js';
@@ -274,16 +275,6 @@ const viewsExtensionPoint: IExtensionPoint<ViewExtensionPointType> = ExtensionsR
 
 const CUSTOM_VIEWS_START_ORDER = 7;
 
-/**
- * Activity bar view containers of extensions that start in the Secondary Side Bar instead, until
- * the user moves them, with the order they take there. Without one they keep their activity bar
- * order, which places them below Source Control.
- */
-const DEFAULT_AUXILIARY_BAR_VIEW_CONTAINERS: ReadonlyMap<string, number | undefined> = new Map([
-	['workbench.view.extension.github-pull-requests', undefined], // GitHub, from GitHub Pull Requests
-	['workbench.view.extension.github-pull-request', 3], // GitHub Pull Request, in the bottom half above Extensions (order 4)
-	['workbench.view.extension.containersView', 3.5], // Containers, from Container Tools, in the bottom half right above Extensions
-]);
 
 class ViewsExtensionHandler implements IWorkbenchContribution {
 
@@ -393,9 +384,8 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 			const icon = themeIcon || resources.joinPath(extension.extensionLocation, descriptor.icon);
 			const id = `workbench.view.extension.${descriptor.id}`;
 			const title = descriptor.title || id;
-			const inAuxiliaryBar = location === ViewContainerLocation.Sidebar && DEFAULT_AUXILIARY_BAR_VIEW_CONTAINERS.has(id);
-			const containerOrder = order++;
-			const viewContainer = this.registerCustomViewContainer(id, title, icon, (inAuxiliaryBar ? DEFAULT_AUXILIARY_BAR_VIEW_CONTAINERS.get(id) : undefined) ?? containerOrder, extension.identifier, inAuxiliaryBar ? ViewContainerLocation.AuxiliaryBar : location);
+			const placement = getDefaultViewContainerPlacement(id, location, order++);
+			const viewContainer = this.registerCustomViewContainer(id, title, icon, placement.order, extension.identifier, placement.location);
 
 			// Move those views that belongs to this container
 			if (existingViewContainers.length) {

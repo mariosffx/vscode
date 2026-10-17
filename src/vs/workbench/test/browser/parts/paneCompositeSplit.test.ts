@@ -123,6 +123,30 @@ suite('PaneCompositeSplit', () => {
 		});
 	});
 
+	test('reset puts back the default bottom view containers for every profile', () => {
+		const store = disposables.add(new DisposableStore());
+		const storageService = store.add(new TestStorageService());
+		storageService.store(STORAGE_KEY, JSON.stringify(['scm']), StorageScope.PROFILE, StorageTarget.USER);
+		const { slots, changes } = createSlots(store, storageService, ['extensions']);
+		slots.setInBottom('search', true);
+
+		slots.reset();
+
+		assert.deepStrictEqual({
+			scm: slots.isInBottom('scm'),
+			search: slots.isInBottom('search'),
+			extensions: slots.isInBottom('extensions'),
+			stored: JSON.parse(storageService.get(STORAGE_KEY, StorageScope.APPLICATION, '[]')),
+			changes: changes(),
+		}, {
+			scm: false,
+			search: false,
+			extensions: true,
+			stored: ['extensions'],
+			changes: 2,
+		});
+	});
+
 	test('a view container leaving the location also leaves the bottom half', () => {
 		const { slots, moveContainer } = createSlots(disposables.add(new DisposableStore()));
 		slots.setInBottom('scm', true);

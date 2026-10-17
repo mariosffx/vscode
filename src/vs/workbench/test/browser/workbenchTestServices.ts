@@ -776,6 +776,11 @@ export class TestPaneCompositeService extends Disposable implements IPaneComposi
 	hideBottomPaneComposite(viewContainerLocation: ViewContainerLocation): void {
 		this.getPartByLocation(viewContainerLocation).hideBottomPaneComposite?.();
 	}
+	resetViewContainerLayout(): void {
+		for (const part of this.parts.values()) {
+			part.resetViewContainerLayout?.();
+		}
+	}
 
 	getPinnedPaneCompositeIds(viewContainerLocation: ViewContainerLocation): string[] {
 		throw new Error('Method not implemented.');

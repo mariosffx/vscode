@@ -108,6 +108,14 @@ export class PaneCompositeSlots extends Disposable {
 		this.update(bottom);
 	}
 
+	/**
+	 * Puts back the default view containers of the bottom half, for every profile.
+	 */
+	reset(): void {
+		this.storageService.store(this.storageKey, JSON.stringify(this.defaultBottom), StorageScope.APPLICATION, StorageTarget.USER);
+		this.update(new Set(this.defaultBottom));
+	}
+
 	private update(bottom: ReadonlySet<string>): void {
 		if (bottom.size === this.bottom.size && [...bottom].every(id => this.bottom.has(id))) {
 			return;
@@ -627,6 +635,14 @@ export class PaneCompositeSplit extends Disposable implements IPaneCompositeSpli
 		}
 
 		return height - bottomHeight;
+	}
+
+	reset(): void {
+		this.slots.reset();
+		this.ratio = PaneCompositeSplit.DEFAULT_RATIO;
+		this.storeRatio();
+		this.bottomPart.resetViewContainerLayout();
+		this.options.host.relayoutPart();
 	}
 
 	getHorizontalSashTop(): number {

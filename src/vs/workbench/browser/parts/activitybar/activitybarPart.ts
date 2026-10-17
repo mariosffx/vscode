@@ -389,6 +389,13 @@ export class ActivitybarPart extends Part {
 		return this.content;
 	}
 
+	/**
+	 * Hides the view containers that start hidden on this rail again, in both of its groups.
+	 */
+	resetHiddenByDefault(): void {
+		this.compositeBar.value?.resetHiddenByDefault();
+	}
+
 	getPinnedPaneCompositeIds(): string[] {
 		return this.compositeBar.value?.getPinnedPaneCompositeIds() ?? [];
 	}
@@ -771,6 +778,11 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 			height -= bottomHeight;
 		}
 		super.layout(width, height);
+	}
+
+	override resetHiddenByDefault(): void {
+		super.resetHiddenByDefault();
+		this.bottomCompositeBar?.resetHiddenByDefault();
 	}
 
 	getActivityBarContextMenuActions(): IAction[] {

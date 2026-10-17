@@ -58,8 +58,6 @@ export interface IActivitybarPartOptions {
 	readonly pinnedViewContainersKey: string;
 	readonly placeholderViewContainersKey: string;
 	readonly viewContainersWorkspaceStateKey: string;
-	/** View containers that stay hidden on the rail until the user shows them. */
-	readonly unpinnedByDefault?: readonly string[];
 	/** When the side bar can split, the rail shows a second group of items for its bottom half. */
 	readonly split?: IActivitybarSplitOptions;
 }
@@ -339,7 +337,6 @@ export class ActivitybarPart extends Part {
 			pinnedViewContainersKey: this.railOptions.pinnedViewContainersKey,
 			placeholderViewContainersKey: this.railOptions.placeholderViewContainersKey,
 			viewContainersWorkspaceStateKey: this.railOptions.viewContainersWorkspaceStateKey,
-			unpinnedByDefault: this.railOptions.unpinnedByDefault,
 			filter: split?.topFilter,
 			transformContextMenuActionsForComposite: split ? (actions, id) => [...actions, ...split.getMoveActions(id)] : undefined,
 			orientation: ActionsOrientation.VERTICAL,

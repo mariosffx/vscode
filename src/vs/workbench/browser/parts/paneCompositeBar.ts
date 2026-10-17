@@ -106,13 +106,18 @@ export interface IPaneCompositeBarOptions {
 	readonly transformContextMenuActionsForComposite?: (actions: IAction[], compositeId: string) => IAction[];
 	readonly colors: (theme: IColorTheme) => ICompositeBarColors;
 	readonly filter?: IPaneCompositeBarFilter;
-
-	/**
-	 * View containers that are not pinned when they first appear on the bar, so they stay hidden
-	 * until the user shows them.
-	 */
-	readonly unpinnedByDefault?: readonly string[];
 }
+
+/**
+ * View containers that are not pinned when they first appear on a bar, so they stay hidden until
+ * the user shows them.
+ */
+const UNPINNED_BY_DEFAULT_VIEW_CONTAINERS: ReadonlySet<string> = new Set([
+	'workbench.panel.chat', // Chat
+	'workbench.view.extension.copilot-chat', // Chat Debug, from GitHub Copilot Chat
+	'workbench.view.extension.gitlens', // GitLens
+	'workbench.view.extension.gitlensInspect', // GitLens Inspect
+]);
 
 export class PaneCompositeBar extends Disposable {
 
@@ -395,7 +400,7 @@ export class PaneCompositeBar extends Disposable {
 			// Pin it by default if it is new
 			const cachedViewContainer = this.cachedViewContainers.filter(({ id }) => id === viewContainer.id)[0];
 			if (!cachedViewContainer) {
-				if (this.options.unpinnedByDefault?.includes(viewContainer.id)) {
+				if (UNPINNED_BY_DEFAULT_VIEW_CONTAINERS.has(viewContainer.id)) {
 					this.compositeBar.unpin(viewContainer.id);
 				} else {
 					this.compositeBar.pin(viewContainer.id);
